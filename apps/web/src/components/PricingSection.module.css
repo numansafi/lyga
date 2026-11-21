@@ -1,0 +1,146 @@
+.section {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 64px 24px;
+}
+
+.heading {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.lead {
+  margin: 0 0 32px;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.card {
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background-color: var(--bg-page);
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.cardPro {
+  border-color: var(--accent-primary);
+  background-color: #fcfdff;
+}
+
+.planHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.planName {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.badge {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background-color: #eff6ff;
+  color: var(--accent-primary);
+}
+
+.priceRow {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.price {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+}
+
+.priceUnit {
+  font-size: 15px;
+  color: var(--text-secondary);
+}
+
+.strikePrice {
+  font-size: 16px;
+  color: var(--text-secondary);
+  text-decoration: line-through;
+}
+
+.statStrip {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding: 12px;
+  border-radius: 8px;
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  margin-bottom: 20px;
+}
+
+.statVal {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.statLabel {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.listItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.ctaNote {
+  margin: 10px 0 0;
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+@media (max-width: 768px) {
+  .section {
+    padding: 48px 16px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}

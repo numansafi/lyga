@@ -1,0 +1,82 @@
+.section {
+  background-color: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.inner {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 64px 24px;
+}
+
+.heading {
+  margin: 0 0 10px;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+}
+
+.lead {
+  margin: 0 0 28px;
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.tableWrap {
+  background-color: var(--bg-page);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  min-width: 640px;
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: 14px 18px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.table tr:last-child td {
+  border-bottom: none;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-primary);
+  background-color: var(--bg-page);
+}
+
+.table td {
+  color: var(--text-secondary);
+}
+
+.featureCell {
+  font-weight: 600;
+  color: var(--text-primary) !important;
+}
+
+.lygaCol {
+  background-color: #f8faff;
+  color: var(--text-primary) !important;
+  font-weight: 600;
+}
+
+.lygaHeader {
+  background-color: #f8faff !important;
+  color: var(--accent-primary) !important;
+}
+
+@media (max-width: 640px) {
+  .inner {
+    padding: 48px 16px;
+  }
+}

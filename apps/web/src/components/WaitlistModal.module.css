@@ -1,0 +1,39 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--accent-primary);
+}
+
+.chipActive {
+  background-color: #eff6ff;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
