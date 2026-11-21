@@ -26,6 +26,20 @@
   padding: 6px 12px;
   border-radius: 999px;
   cursor: pointer;
+  transition:
+    transform 110ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease,
+    color 140ms ease;
+}
+
+.chip:active {
+  transform: scale(0.95);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .chip:hover {
