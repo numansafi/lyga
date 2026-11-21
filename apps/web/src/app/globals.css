@@ -6,10 +6,20 @@
   --border-subtle: #e5e7eb;
   --text-primary: #111827;
   --text-secondary: #4b5563;
-  --accent-primary: #1d4ed8;
-  --accent-primary-hover: #1e40af;
+  --accent-primary: #a51c30;
+  --accent-primary-hover: #821625;
+  --accent-primary-tint: #fff1f3;
+  --accent-surface-tint: #fffafa;
   --status-encrypted-bg: #d1fae5;
   --status-encrypted-text: #065f46;
+}
+
+/* Saved alternate preset: Electric Vermilion */
+[data-accent='vermilion'] {
+  --accent-primary: #e14d2a;
+  --accent-primary-hover: #bf3b1c;
+  --accent-primary-tint: #fef2f0;
+  --accent-surface-tint: #fff9f8;
 }
 
 html {

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Button, Modal, TextInput } from '@mantine/core';
 import { trackEvent, type WaitlistPlan } from '@/lib/analytics';
+import { validateWaitlistEmail } from '@/lib/email-validation';
 import styles from './WaitlistModal.module.css';
 
 interface WaitlistModalProps {
@@ -11,35 +12,44 @@ interface WaitlistModalProps {
   onClose: () => void;
 }
 
-const DEVICE_COMBOS = [
-  'iPhone + Windows',
-  'iPhone + Mac',
-  'Android + Windows',
-  'Other',
-];
+const PHONE_OPTIONS = ['iPhone', 'Android', 'Other'];
+const COMPUTER_OPTIONS = ['Windows', 'Mac', 'Linux', 'Other'];
+
+function formatDeviceCombo(phone: string | null, computer: string | null): string | undefined {
+  if (phone && computer) return `${phone} + ${computer}`;
+  return phone ?? computer ?? undefined;
+}
 
 export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
   const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string | null>(null);
-  const [deviceCombo, setDeviceCombo] = useState<string | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
+  const [computer, setComputer] = useState<string | null>(null);
   const [painNote, setPainNote] = useState('');
-  const [feedbackSaved, setFeedbackSaved] = useState(false);
+  const [savingDone, setSavingDone] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
 
   const handleResetAndClose = () => {
     setError(null);
     setSubmittedEmail(null);
-    setDeviceCombo(null);
+    setPhone(null);
+    setComputer(null);
     setPainNote('');
-    setFeedbackSaved(false);
+    setSavingDone(false);
     setNoteError(null);
     onClose();
   };
 
   const handleSubmitEmail = async (e: React.FormEvent) => {
     e.preventDefault();
+    const validation = validateWaitlistEmail(email);
+    if (!validation.valid) {
+      setError(validation.error ?? 'Please enter a valid email address.');
+      return;
+    }
+
     setError(null);
     setSubmitting(true);
 
@@ -47,7 +57,7 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
       const res = await fetch('/api/waitlist', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, plan }),
+        body: JSON.stringify({ email: validation.normalized, plan }),
       });
       const data = (await res.json()) as { error?: string; entry?: { email: string } };
       if (!res.ok) {
@@ -65,8 +75,9 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
     }
   };
 
-  const handleSelectCombo = async (combo: string) => {
-    setDeviceCombo(combo);
+  const syncDeviceSelection = async (nextPhone: string | null, nextComputer: string | null) => {
+    const combo = formatDeviceCombo(nextPhone, nextComputer);
+    if (!combo) return;
     trackEvent('device_combo_selected', { combo });
     if (!submittedEmail) return;
 
@@ -77,17 +88,30 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
     }).catch(() => undefined);
   };
 
-  const handleSavePainNote = async (e: React.FormEvent) => {
+  const handleDone = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!submittedEmail) return;
+    if (!submittedEmail) {
+      handleResetAndClose();
+      return;
+    }
+
+    const combo = formatDeviceCombo(phone, computer);
+    if (!painNote.trim() && !combo) {
+      handleResetAndClose();
+      return;
+    }
+
     setNoteError(null);
+    setSavingDone(true);
     const res = await fetch('/api/waitlist', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: submittedEmail, deviceCombo, painNote }),
+      body: JSON.stringify({ email: submittedEmail, deviceCombo: combo, painNote }),
     }).catch(() => null);
+    setSavingDone(false);
+
     if (res?.ok) {
-      setFeedbackSaved(true);
+      handleResetAndClose();
     } else {
       setNoteError('Could not save note. Please try again.');
     }
@@ -100,7 +124,17 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
       : 'Join the Lyga waitlist';
 
   return (
-    <Modal opened={opened} onClose={handleResetAndClose} title={title} centered>
+    <Modal
+      opened={opened}
+      onClose={handleResetAndClose}
+      title={title}
+      centered
+      transitionProps={{
+        transition: 'pop',
+        duration: 220,
+        timingFunction: 'cubic-bezier(0.22, 1, 0.36, 1)',
+      }}
+    >
       {!submittedEmail ? (
         <form className={styles.form} onSubmit={handleSubmitEmail}>
           <p className={styles.note}>
@@ -113,7 +147,10 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
             label="Email address"
             placeholder="you@example.com"
             value={email}
-            onChange={(e) => setEmail(e.currentTarget.value)}
+            onChange={(e) => {
+              setEmail(e.currentTarget.value);
+              if (error) setError(null);
+            }}
             error={error}
             required
             autoFocus
@@ -123,55 +160,85 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
           </Button>
         </form>
       ) : (
-        <div className={styles.form}>
-          <p className={styles.note}>
-            Saved for <strong>{submittedEmail}</strong>. Quick question to help us prioritize platforms:
-          </p>
+        <div className={`${styles.form} ${styles.stepTwoEnter}`}>
+          <div className={styles.savedBanner}>
+            <div className={styles.savedTitle}>
+              <span className={styles.checkBadge} aria-hidden="true">
+                <svg viewBox="0 0 16 16" fill="none" className={styles.checkSvg}>
+                  <path
+                    d="M3.5 8.5L6.5 11.5L12.5 4.5"
+                    stroke="currentColor"
+                    strokeWidth="2.2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className={styles.checkPath}
+                  />
+                </svg>
+              </span>
+              <span>
+                Got it, <strong>{submittedEmail}</strong> is saved!
+              </span>
+            </div>
+            <p className={styles.savedSub}>
+              Let us know what you use so we can build Lyga around your setup:
+            </p>
+          </div>
 
           <div>
             <p className={styles.note} style={{ marginBottom: 8, fontWeight: 600 }}>
-              Which setup do you use?
+              Which phone do you use?
             </p>
             <div className={styles.chips}>
-              {DEVICE_COMBOS.map((combo) => (
+              {PHONE_OPTIONS.map((opt) => (
                 <button
-                  key={combo}
+                  key={opt}
                   type="button"
-                  aria-pressed={deviceCombo === combo}
-                  className={`${styles.chip} ${deviceCombo === combo ? styles.chipActive : ''}`}
-                  onClick={() => handleSelectCombo(combo)}
+                  aria-pressed={phone === opt}
+                  className={`${styles.chip} ${phone === opt ? styles.chipActive : ''}`}
+                  onClick={() => {
+                    setPhone(opt);
+                    void syncDeviceSelection(opt, computer);
+                  }}
                 >
-                  {combo}
+                  {opt}
                 </button>
               ))}
             </div>
           </div>
 
-          <form className={styles.form} onSubmit={handleSavePainNote}>
+          <div>
+            <p className={styles.note} style={{ marginBottom: 8, fontWeight: 600 }}>
+              Which computer do you use?
+            </p>
+            <div className={styles.chips}>
+              {COMPUTER_OPTIONS.map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  aria-pressed={computer === opt}
+                  className={`${styles.chip} ${computer === opt ? styles.chipActive : ''}`}
+                  onClick={() => {
+                    setComputer(opt);
+                    void syncDeviceSelection(phone, opt);
+                  }}
+                >
+                  {opt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <form className={styles.form} onSubmit={handleDone}>
             <TextInput
-              label="What was the last file that was annoying to send? (optional)"
+              label="What file was a pain to send recently? (optional)"
               placeholder="e.g. 1.2 GB 4K clip from iPhone to Windows"
               value={painNote}
               onChange={(e) => setPainNote(e.currentTarget.value)}
               error={noteError}
             />
-            {feedbackSaved ? (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
-                <p className={styles.note}>Thanks, noted.</p>
-                <Button variant="subtle" size="sm" onClick={handleResetAndClose}>
-                  Done
-                </Button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', gap: 10 }}>
-                <Button type="submit" variant="light" size="sm">
-                  Save note
-                </Button>
-                <Button variant="subtle" size="sm" onClick={handleResetAndClose}>
-                  Done
-                </Button>
-              </div>
-            )}
+            <Button type="submit" fullWidth loading={savingDone}>
+              Done
+            </Button>
           </form>
         </div>
       )}

@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server';
 import type { WaitlistPlan } from '@/lib/analytics';
+import { validateWaitlistEmail } from '@/lib/email-validation';
 import { saveWaitlistSignup, updateWaitlistFeedback } from '@/lib/waitlist-store';
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function isValidEmail(email: string): boolean {
-  return email.length <= 254 && EMAIL_REGEX.test(email);
-}
 
 function isValidPlan(plan: unknown): plan is WaitlistPlan {
   return plan === 'free' || plan === 'pro_founder';
@@ -30,10 +25,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON request body.' }, { status: 400 });
     }
 
-    const email = typeof body.email === 'string' ? body.email.trim() : '';
-    if (!isValidEmail(email)) {
+    const rawEmail = typeof body.email === 'string' ? body.email : '';
+    const validation = validateWaitlistEmail(rawEmail);
+    if (!validation.valid) {
       return NextResponse.json(
-        { error: 'Please enter a valid email address.' },
+        { error: validation.error ?? 'Please enter a valid email address.' },
         { status: 400 }
       );
     }
@@ -43,7 +39,7 @@ export async function POST(req: Request) {
     }
 
     const plan: WaitlistPlan = isValidPlan(body.plan) ? body.plan : 'free';
-    const entry = await saveWaitlistSignup(email, plan);
+    const entry = await saveWaitlistSignup(validation.normalized, plan);
 
     return NextResponse.json({ ok: true, entry: { email: entry.email, plan: entry.plan } });
   } catch (err) {
@@ -59,9 +55,13 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: 'Invalid JSON request body.' }, { status: 400 });
     }
 
-    const email = typeof body.email === 'string' ? body.email.trim() : '';
-    if (!isValidEmail(email)) {
-      return NextResponse.json({ error: 'Valid email is required.' }, { status: 400 });
+    const rawEmail = typeof body.email === 'string' ? body.email : '';
+    const validation = validateWaitlistEmail(rawEmail);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: validation.error ?? 'Valid email is required.' },
+        { status: 400 }
+      );
     }
 
     const deviceCombo =
@@ -69,7 +69,7 @@ export async function PATCH(req: Request) {
     const painNote =
       typeof body.painNote === 'string' ? body.painNote.slice(0, 300) : undefined;
 
-    await updateWaitlistFeedback(email, deviceCombo, painNote);
+    await updateWaitlistFeedback(validation.normalized, deviceCombo, painNote);
     return NextResponse.json({ ok: true });
   } catch (err) {
     console.error('[waitlist PATCH]', err);

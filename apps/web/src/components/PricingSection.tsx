@@ -45,15 +45,15 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
 
             <ul className={styles.list}>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 Unlimited text, links, and code snippets
               </li>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 2 GB active rolling file storage
               </li>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 End-to-end encrypted browser feed
               </li>
             </ul>
@@ -100,19 +100,19 @@ export function PricingSection({ onSelectPlan }: PricingSectionProps) {
 
             <ul className={styles.list}>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 Everything in Starter, plus 5 GB uncompressed uploads
               </li>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 100 GB persistent encrypted vault (no 7-day expiry)
               </li>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 Expiring public Drop Links for clients
               </li>
               <li className={styles.listItem}>
-                <Check size={16} color="#1D4ED8" aria-hidden="true" />
+                <Check size={16} color="var(--accent-primary)" aria-hidden="true" />
                 1-click HEIC to JPG conversion for Windows
               </li>
             </ul>

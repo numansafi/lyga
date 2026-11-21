@@ -1,37 +1,107 @@
+'use client';
+
+import { useEffect, useRef, useState } from 'react';
 import styles from './ComparisonSection.module.css';
 
-const ROWS = [
+interface ComparisonCell {
+  text: string;
+  pct?: number;
+}
+
+interface ComparisonRow {
+  feature: string;
+  whatsapp: ComparisonCell;
+  emailFwd: ComparisonCell;
+  localSend: ComparisonCell;
+  lyga: ComparisonCell;
+}
+
+const ROWS: ComparisonRow[] = [
   {
-    feature: 'Max file size',
-    whatsapp: '16 MB (Business API)',
-    emailFwd: '25 MB',
-    localSend: 'Unlimited (local only)',
-    lyga: '500 MB Free, 5 GB Pro',
+    feature: 'How big can a file be?',
+    whatsapp: { text: 'Tiny — 16 MB', pct: 4 },
+    emailFwd: { text: '25 MB', pct: 6 },
+    localSend: { text: '2 GB (free tier)', pct: 40 },
+    lyga: { text: '500 MB free, 5 GB Pro', pct: 100 },
   },
   {
-    feature: 'Media quality',
-    whatsapp: 'Compressed',
-    emailFwd: 'Original',
-    localSend: 'Original',
-    lyga: 'Original (uncompressed)',
+    feature: 'Does it ruin quality?',
+    whatsapp: { text: 'Compresses videos & photos' },
+    emailFwd: { text: 'Keeps original' },
+    localSend: { text: 'Keeps original' },
+    lyga: { text: 'Never — 100% original' },
   },
   {
-    feature: 'Works across networks',
-    whatsapp: 'Yes',
-    emailFwd: 'Yes',
-    localSend: 'Same Wi-Fi only',
-    lyga: 'Yes (even when laptop sleeps)',
+    feature: 'Works anywhere?',
+    whatsapp: { text: 'Yes' },
+    emailFwd: { text: 'Yes' },
+    localSend: { text: 'Links expire or same Wi-Fi' },
+    lyga: { text: 'Yes — even if your PC is asleep' },
   },
   {
-    feature: 'Persistent feed',
-    whatsapp: 'Buried in chat',
-    emailFwd: 'Inbox clutter',
-    localSend: 'None',
-    lyga: 'Searchable encrypted feed',
+    feature: 'Easy to find later?',
+    whatsapp: { text: 'Buried under old chats' },
+    emailFwd: { text: 'Lost in your inbox' },
+    localSend: { text: 'Gone after one transfer' },
+    lyga: { text: 'Clean, searchable personal feed' },
   },
 ];
 
+function CellContent({
+  cell,
+  isLyga,
+  barsVisible,
+}: {
+  cell: ComparisonCell;
+  isLyga?: boolean;
+  barsVisible: boolean;
+}) {
+  return (
+    <>
+      <div className={isLyga ? styles.lygaCellRow : undefined}>
+        {isLyga && (
+          <span className={styles.lygaTick} aria-hidden="true">
+            ✓✓
+          </span>
+        )}
+        <span>{cell.text}</span>
+      </div>
+      {typeof cell.pct === 'number' && (
+        <div className={styles.barTrack} aria-hidden="true">
+          <div
+            className={`${isLyga ? styles.barFillLyga : styles.barFill} ${
+              barsVisible ? styles.barVisible : ''
+            }`}
+            style={{ width: `${cell.pct}%` }}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function ComparisonSection() {
+  const tableRef = useRef<HTMLDivElement>(null);
+  const [barsVisible, setBarsVisible] = useState(false);
+
+  useEffect(() => {
+    const el = tableRef.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setBarsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.25 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   return (
     <section id="compare" className={styles.section}>
       <div className={styles.inner}>
@@ -40,25 +110,27 @@ export function ComparisonSection() {
           Stop emailing yourself attachments or shrinking 4K clips through chat apps.
         </p>
 
-        <div className={styles.tableWrap}>
+        <div ref={tableRef} className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
                 <th>What matters</th>
                 <th>WhatsApp</th>
-                <th>Email / fwd</th>
-                <th>LocalSend</th>
-                <th className={styles.lygaHeader}>Lyga</th>
+                <th>Email</th>
+                <th>File sharing apps</th>
+                <th className={styles.lygaHeader}>LYGA</th>
               </tr>
             </thead>
             <tbody>
               {ROWS.map((row) => (
                 <tr key={row.feature}>
                   <td className={styles.featureCell}>{row.feature}</td>
-                  <td>{row.whatsapp}</td>
-                  <td>{row.emailFwd}</td>
-                  <td>{row.localSend}</td>
-                  <td className={styles.lygaCol}>{row.lyga}</td>
+                  <td><CellContent cell={row.whatsapp} barsVisible={barsVisible} /></td>
+                  <td><CellContent cell={row.emailFwd} barsVisible={barsVisible} /></td>
+                  <td><CellContent cell={row.localSend} barsVisible={barsVisible} /></td>
+                  <td className={styles.lygaCol}>
+                    <CellContent cell={row.lyga} isLyga barsVisible={barsVisible} />
+                  </td>
                 </tr>
               ))}
             </tbody>

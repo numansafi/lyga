@@ -12,7 +12,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
     <header className={styles.header}>
       <div className={styles.inner}>
         <a href="#" className={styles.brand}>
-          Lyga
+          LYGA
         </a>
         <nav className={styles.nav} aria-label="Primary">
           <a href="#compare" className={styles.link}>
@@ -24,7 +24,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
           <a href="#faq" className={styles.link}>
             FAQ
           </a>
-          <Button size="sm" onClick={onOpenWaitlist}>
+          <Button size="sm" className={styles.ctaButton} onClick={onOpenWaitlist}>
             Join Early Access
           </Button>
         </nav>

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { ComparisonSection } from '@/components/ComparisonSection';
 import { FaqSection } from '@/components/FaqSection';
 import { HeroSection } from '@/components/HeroSection';
+import { HighlightsSection } from '@/components/HighlightsSection';
 import { LandingHeader } from '@/components/LandingHeader';
 import { PricingSection } from '@/components/PricingSection';
 import { WaitlistModal } from '@/components/WaitlistModal';
@@ -28,13 +29,26 @@ export default function HomePage() {
     <>
       <LandingHeader onOpenWaitlist={() => openWaitlist('free', 'hero')} />
       <main>
-        <HeroSection onOpenWaitlist={() => openWaitlist('free', 'hero')} />
+        <HeroSection />
+        <HighlightsSection />
         <ComparisonSection />
         <PricingSection
           onSelectPlan={(plan) => openWaitlist(plan, plan)}
         />
         <FaqSection />
       </main>
+      <footer
+        style={{
+          borderTop: '1px solid var(--border-subtle)',
+          padding: '24px',
+          textAlign: 'center',
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        <strong style={{ color: 'var(--text-primary)', letterSpacing: '0.03em' }}>LYGA</strong> ·
+        Built for iPhone + Windows · Encrypted in your browser
+      </footer>
       <WaitlistModal
         opened={modalOpened}
         plan={selectedPlan}

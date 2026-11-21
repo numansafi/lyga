@@ -1,6 +1,5 @@
 .header {
-  border-bottom: 1px solid var(--border-subtle);
-  background-color: var(--bg-page);
+  background-color: var(--accent-primary);
 }
 
 .inner {
@@ -14,9 +13,9 @@
 
 .brand {
   font-size: 20px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #ffffff;
   text-decoration: none;
 }
 
@@ -29,12 +28,27 @@
 .link {
   font-size: 14px;
   font-weight: 500;
-  color: var(--text-secondary);
+  color: rgba(255, 255, 255, 0.88);
   text-decoration: none;
 }
 
 .link:hover {
-  color: var(--text-primary);
+  color: #ffffff;
+}
+
+.ctaButton {
+  background-color: #ffffff !important;
+  color: var(--text-primary) !important;
+  font-weight: 700 !important;
+  transition: transform 120ms ease-out, background-color 150ms ease;
+}
+
+.ctaButton:active {
+  transform: scale(0.97);
+}
+
+.ctaButton:hover {
+  background-color: var(--accent-primary-tint) !important;
 }
 
 @media (max-width: 640px) {

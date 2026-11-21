@@ -65,14 +65,70 @@
 }
 
 .lygaCol {
-  background-color: #f8faff;
+  background-color: var(--accent-primary-tint);
+  border-left: 2px solid var(--accent-primary);
   color: var(--text-primary) !important;
-  font-weight: 600;
+  font-weight: 700;
 }
 
 .lygaHeader {
-  background-color: #f8faff !important;
-  color: var(--accent-primary) !important;
+  background-color: var(--accent-primary) !important;
+  border-left: 2px solid var(--accent-primary);
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.04em;
+}
+
+.lygaCellRow {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lygaTick {
+  flex-shrink: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  color: var(--accent-primary);
+}
+
+.barTrack {
+  margin-top: 6px;
+  height: 4px;
+  width: 100%;
+  background-color: var(--border-subtle);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  background-color: #9ca3af;
+  border-radius: 999px;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.barFillLyga {
+  height: 100%;
+  background-color: var(--accent-primary);
+  border-radius: 999px;
+  transform-origin: left;
+  transform: scaleX(0);
+  transition: transform 950ms cubic-bezier(0.22, 1, 0.36, 1) 120ms;
+}
+
+.barVisible {
+  transform: scaleX(1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barFill,
+  .barFillLyga {
+    transform: scaleX(1);
+    transition: none;
+  }
 }
 
 @media (max-width: 640px) {

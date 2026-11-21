@@ -36,8 +36,18 @@
 }
 
 .cardPro {
+  border-width: 2px;
   border-color: var(--accent-primary);
-  background-color: #fcfdff;
+  background-color: var(--accent-surface-tint);
+  box-shadow: 4px 4px 0 rgba(165, 28, 48, 0.16);
+}
+
+.card button {
+  transition: transform 120ms ease-out;
+}
+
+.card button:active {
+  transform: scale(0.97);
 }
 
 .planHeader {
@@ -60,7 +70,7 @@
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 999px;
-  background-color: #eff6ff;
+  background-color: var(--accent-primary-tint);
   color: var(--accent-primary);
 }
 

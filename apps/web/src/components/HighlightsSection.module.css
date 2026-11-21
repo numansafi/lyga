@@ -1,0 +1,120 @@
+.section {
+  background-color: var(--bg-page);
+  padding: 104px 24px;
+  min-height: 440px;
+  display: flex;
+  align-items: center;
+}
+
+.inner {
+  width: 100%;
+  max-width: 1120px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 5fr 7fr;
+  gap: 40px;
+  align-items: center;
+}
+
+.heading {
+  margin: 0;
+  font-size: clamp(28px, 3.2vw, 36px);
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.025em;
+  color: var(--text-primary);
+}
+
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card {
+  border-radius: 14px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  transition:
+    transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 160ms ease;
+}
+
+.card:hover {
+  transform: translate(-1px, -3px);
+}
+
+.cardText {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.tick {
+  flex-shrink: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.cardPrimary {
+  margin-right: 40px;
+  border: 2px solid var(--accent-primary);
+  background-color: var(--accent-surface-tint);
+  box-shadow: 4px 4px 0 rgba(165, 28, 48, 0.14);
+}
+
+.cardPrimary:hover {
+  box-shadow: 7px 7px 0 rgba(165, 28, 48, 0.24);
+}
+
+.cardNeutral {
+  margin-left: 40px;
+  border: 2px solid var(--text-primary);
+  background-color: var(--bg-page);
+  box-shadow: 4px 4px 0 rgba(17, 24, 39, 0.12);
+}
+
+.cardNeutral:hover {
+  box-shadow: 7px 7px 0 rgba(17, 24, 39, 0.2);
+}
+
+.cardSolid {
+  margin-right: 24px;
+  border: 2px solid var(--accent-primary);
+  background-color: var(--accent-primary);
+  box-shadow: 4px 4px 0 rgba(17, 24, 39, 0.18);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: 10px 20px;
+}
+
+.cardSolid:hover {
+  box-shadow: 7px 7px 0 rgba(17, 24, 39, 0.24);
+}
+
+@media (max-width: 900px) {
+  .section {
+    padding: 72px 16px;
+    min-height: auto;
+  }
+
+  .inner {
+    grid-template-columns: 1fr;
+    gap: 24px;
+  }
+
+  .cardPrimary,
+  .cardNeutral,
+  .cardSolid {
+    margin-left: 0;
+    margin-right: 0;
+  }
+}

@@ -1,11 +1,16 @@
 import type { Metadata } from 'next';
-import { Plus_Jakarta_Sans, JetBrains_Mono } from 'next/font/google';
-import { ColorSchemeScript, MantineProvider, createTheme } from '@mantine/core';
+import { Bricolage_Grotesque, JetBrains_Mono } from 'next/font/google';
+import {
+  ColorSchemeScript,
+  MantineProvider,
+  createTheme,
+  mantineHtmlProps,
+} from '@mantine/core';
 import './globals.css';
 
-const plusJakarta = Plus_Jakarta_Sans({
+const bricolage = Bricolage_Grotesque({
   subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+  weight: ['400', '500', '600', '700', '800'],
   variable: '--font-sans',
 });
 
@@ -18,19 +23,32 @@ const jetbrainsMono = JetBrains_Mono({
 const theme = createTheme({
   fontFamily: 'var(--font-sans), -apple-system, BlinkMacSystemFont, sans-serif',
   fontFamilyMonospace: 'var(--font-mono), monospace',
-  primaryColor: 'cobalt',
+  primaryColor: 'crimson',
   colors: {
-    cobalt: [
-      '#eff6ff',
-      '#dbeafe',
-      '#bfdbfe',
-      '#93c5fd',
-      '#60a5fa',
-      '#3b82f6',
-      '#1d4ed8',
-      '#1e40af',
-      '#1e3a8a',
-      '#172554',
+    crimson: [
+      '#fff1f3',
+      '#fde0e4',
+      '#fbc0c9',
+      '#f794a3',
+      '#f0657b',
+      '#dc3553',
+      '#a51c30',
+      '#821625',
+      '#68111e',
+      '#4d0c16',
+    ],
+    // Saved alternate preset: switch primaryColor to 'vermilion' + add data-accent="vermilion" on <html>
+    vermilion: [
+      '#fef2f0',
+      '#fde0db',
+      '#fbc5bc',
+      '#f7a394',
+      '#f27c67',
+      '#eb5f45',
+      '#e14d2a',
+      '#bf3b1c',
+      '#9c2f16',
+      '#782411',
     ],
   },
   defaultRadius: 'md',
@@ -48,7 +66,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${plusJakarta.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="en"
+      className={`${bricolage.variable} ${jetbrainsMono.variable}`}
+      {...mantineHtmlProps}
+    >
       <head>
         <ColorSchemeScript defaultColorScheme="light" />
       </head>

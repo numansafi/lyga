@@ -37,7 +37,7 @@
 | 2026-11-21 | Build **48-hour Validation Landing Page** first (`/`), then Core Web MVP (`/app`) | De-risk willingness to pay (£5/mo Pro Founder Spot) before building full E2EE/R2 infrastructure. |
 | 2026-11-21 | Pricing in `£` (`£0` / `£5` Early Bird / `£8` Standard) with PostHog tracking | Undercuts WeTransfer Starter ($8/mo) and matches Send Anywhere Lite ($5.99/mo) with 100 GB vault. |
 | 2026-11-21 | Free tier set to **500 MB/file, 2 GB active storage, 7-day auto-expiry** | Allows users to test a real 30–60s 4K `.MOV` clip (150–400 MB) while preserving Pro upgrade incentives. |
-| 2026-11-21 | **"Daylight Studio Utility"** light theme (`#FFFFFF`, `#F6F7F9`, `#1D4ED8`, `#065F46`/`#D1FAE5`) | Avoids generic dark-mode SaaS templates; passes WCAG AA/AAA contrast on badges and text. |
+| 2026-11-21 | **"Daylight Studio Utility"** light theme (`#FFFFFF`, `#F6F7F9`, `#A51C30` Harvard Crimson official accent, `#065F46`/`#D1FAE5`; `#E14D2A` Electric Vermilion saved as alternate preset) | High-trust editorial contrast (7.3:1 AAA on white) while avoiding generic dark-mode or blue cloud templates. |
 
 ## Changelog
 - **2026-11-21:** Verified `apps/web` Validation Landing Page (`pnpm test`, `pnpm typecheck`, `pnpm build`, live `/api/waitlist` smoke test), hardened `/api/waitlist` validation, production Supabase guard, and `WaitlistModal` feedback state, and added `waitlist-store.test.ts`.

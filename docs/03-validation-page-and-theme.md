@@ -15,13 +15,15 @@ Lyga is an everyday utility for creators and cross-device users. The interface f
 | `--border-subtle` | `#E5E7EB` | Tactile 1px borders on cards, tabs, and inputs (no soft grey drop shadows) |
 | `--text-primary` | `#111827` | Headings, primary labels, item titles |
 | `--text-secondary` | `#4B5563` | Body copy, subheadlines, helper text |
-| `--accent-primary` | `#1D4ED8` | Primary buttons, active tab indicator, Pro card border |
-| `--accent-primary-hover` | `#1E40AF` | Hover state for primary buttons |
+| `--accent-primary` | `#A51C30` | Official Harvard Crimson accent (buttons, hero, Pro card border) |
+| `--accent-primary-hover` | `#821625` | Hover state for primary buttons |
+| `--accent-primary-tint` | `#FFF1F3` | Soft crimson tint for Early Bird badge and active chips |
+| *(Saved preset)* | `#E14D2A` | Alternate Electric Vermilion preset (`[data-accent="vermilion"]`) |
 | `--status-encrypted-bg` | `#D1FAE5` | Background for the "Encrypted" badge |
 | `--status-encrypted-text` | `#065F46` | Text for the "Encrypted" badge (WCAG AA/AAA compliant) |
 
 ### Typography and Restraint Rules
-- **Font family:** `Plus Jakarta Sans` for headings and body, plus `JetBrains Mono` for file sizes and code snippets.
+- **Font family:** `Bricolage Grotesque` for headings and body, plus `JetBrains Mono` for file sizes and code snippets.
 - **Sentence case everywhere:** No ALL-CAPS eyebrow labels above headings, no gradient text, and no arrow symbols (`->`) appended to buttons.
 - **Left-aligned editorial hero:** Keeps reading natural across desktop and mobile.
 - **Flat tactile surfaces:** Use `1px solid #E5E7EB` borders and `#F6F7F9` surface shifts instead of generic drop shadows.
