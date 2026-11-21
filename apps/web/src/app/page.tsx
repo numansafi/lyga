@@ -1,12 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ComparisonSection } from '@/components/ComparisonSection';
-import { FaqSection } from '@/components/FaqSection';
+import { DmFeedSection } from '@/components/DmFeedSection';
 import { HeroSection } from '@/components/HeroSection';
-import { HighlightsSection } from '@/components/HighlightsSection';
 import { LandingHeader } from '@/components/LandingHeader';
-import { PricingSection } from '@/components/PricingSection';
 import { WaitlistModal } from '@/components/WaitlistModal';
 import { initAnalytics, trackEvent, type WaitlistPlan } from '@/lib/analytics';
 
@@ -30,12 +27,7 @@ export default function HomePage() {
       <LandingHeader onOpenWaitlist={() => openWaitlist('free', 'hero')} />
       <main>
         <HeroSection />
-        <HighlightsSection />
-        <ComparisonSection />
-        <PricingSection
-          onSelectPlan={(plan) => openWaitlist(plan, plan)}
-        />
-        <FaqSection />
+        <DmFeedSection onSelectPlan={(plan) => openWaitlist(plan, plan)} />
       </main>
       <footer
         style={{
