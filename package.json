@@ -1,0 +1,13 @@
+{
+  "name": "lyga",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --filter @lyga/web dev",
+    "build": "pnpm --filter @lyga/web build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.2"
+  }
+}
