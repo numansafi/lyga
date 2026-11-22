@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Accordion, Button } from '@mantine/core';
-import { Check, Lock } from 'lucide-react';
+import { Button } from '@mantine/core';
+import { ChevronDown, Lock } from 'lucide-react';
 import type { WaitlistPlan } from '@/lib/analytics';
 import styles from './DmFeedSection.module.css';
 
@@ -10,7 +10,21 @@ interface DmFeedSectionProps {
   onSelectPlan: (plan: WaitlistPlan) => void;
 }
 
-const COMPARE_ROWS = [
+type CompetitorKey = 'whatsapp' | 'email' | 'apps';
+
+const COMPETITOR_TABS: { key: CompetitorKey; tabLabel: string; name: string }[] = [
+  { key: 'whatsapp', tabLabel: 'vs. Messaging yourself', name: 'Messaging yourself' },
+  { key: 'email', tabLabel: 'vs. Email', name: 'Email' },
+  { key: 'apps', tabLabel: 'vs. Sharing apps', name: 'File sharing apps' },
+];
+
+const COMPARE_ROWS: {
+  feature: string;
+  whatsapp: { text: string; pct?: number };
+  email: { text: string; pct?: number };
+  apps: { text: string; pct?: number };
+  lyga: { text: string; pct?: number };
+}[] = [
   {
     feature: 'How big can a file be?',
     whatsapp: { text: 'Tiny — 16 MB', pct: 4 },
@@ -37,40 +51,103 @@ const COMPARE_ROWS = [
     whatsapp: { text: 'Buried under old chats' },
     email: { text: 'Lost in your inbox' },
     apps: { text: 'Gone after one transfer' },
-    lyga: { text: 'Clean, searchable personal feed' },
+    lyga: { text: 'Clean, searchable timeline' },
   },
 ];
 
 const FAQS = [
   {
-    value: 'encryption',
-    question: 'How is it encrypted?',
+    value: 'privacy',
+    question: 'Can Lyga see my photos or files?',
     answer:
-      'Files and messages are encrypted in your browser with AES-256-GCM before upload. The pairing key stays in the URL # fragment and never reaches our servers.',
+      "No. Everything is locked in your browser before it leaves your device. Only your own phone and computer can unlock it, so we can't read your notes, file names, or files.",
   },
   {
-    value: 'devices',
-    question: 'Which devices work?',
+    value: 'install',
+    question: 'Do I have to install an app on my computer?',
     answer:
-      'Any modern desktop or mobile browser on Windows, Mac, Linux, iPhone, and Android. Native iOS and Android Share Sheet apps are planned next.',
+      "No. Lyga runs straight in your browser, so it works on your main PC, a Mac, or even a work computer where you can't install apps.",
+  },
+  {
+    value: 'wifi',
+    question: 'Do my phone and computer need to be on the same Wi-Fi?',
+    answer:
+      'No. You can send files from anywhere, even on mobile data while your computer is asleep at home. Everything shows up as soon as you open your browser.',
+  },
+  {
+    value: 'quality',
+    question: 'Will it shrink my photos or ruin 4K video quality?',
+    answer:
+      'Never. Everything arrives in the exact original size and quality you sent it in.',
   },
   {
     value: 'expiry',
-    question: 'What happens to Free files after 7 days?',
+    question: 'What happens to my files after 7 days on the Free plan?',
     answer:
-      'Free files expire automatically after 7 days to keep storage lean. Text, links, and code snippets stay, and Pro keeps files in a 100 GB persistent vault.',
+      "Uploaded files are removed after 7 days, while your text notes and links stay. If you want to keep files long-term, Pro gives you 100 GB of storage that doesn't expire.",
   },
   {
     value: 'billing',
-    question: 'Will I be charged today for the Founder Spot?',
+    question: 'Will I be charged today if I pick the £5/mo Founder Rate?',
     answer:
-      'No. Entering your email reserves the £5/mo Early Bird rate for when Pro launches. No card is collected today.',
+      "No. You don't enter a card today. Joining the waitlist just saves your £5/mo rate for when Pro launches.",
   },
 ];
+
+interface AnimatedMsgProps {
+  side: 'left' | 'right';
+  delayMs?: number;
+  id?: string;
+  children: React.ReactNode;
+}
+
+function AnimatedMsg({ side, delayMs = 0, id, children }: AnimatedMsgProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.25, rootMargin: '0px 0px -18% 0px' }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const alignClass = side === 'left' ? styles.msgLeft : styles.msgRight;
+  const animClass = side === 'left' ? styles.animLeft : styles.animRight;
+
+  return (
+    <div
+      id={id}
+      ref={ref}
+      className={`${styles.msgRow} ${alignClass} ${animClass} ${
+        visible ? styles.msgVisible : ''
+      }`}
+      style={{ transitionDelay: `${delayMs}ms` }}
+    >
+      {children}
+    </div>
+  );
+}
 
 export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
   const compareRef = useRef<HTMLDivElement>(null);
   const [barsVisible, setBarsVisible] = useState(false);
+  const [activeCompetitor, setActiveCompetitor] = useState<CompetitorKey>('whatsapp');
+  const [openFaq, setOpenFaq] = useState<string | null>(FAQS[0]?.value ?? null);
+
+  const selectedCompetitor =
+    COMPETITOR_TABS.find((tab) => tab.key === activeCompetitor) ?? COMPETITOR_TABS[0];
 
   useEffect(() => {
     const el = compareRef.current;
@@ -98,15 +175,14 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           <span className={styles.statusPill}>
             <Lock size={12} strokeWidth={2.2} aria-hidden="true" />
             <span>TODAY · END-TO-END ENCRYPTED</span>
-            <span className={styles.statusDevices}>· PHONE ↔ PC</span>
           </span>
         </div>
 
         {/* Message 1: Left (The Problem) */}
-        <div className={`${styles.msgRow} ${styles.msgLeft}`}>
+        <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
-              <span className={styles.senderName}>iPhone 16</span>
+              <span className={styles.senderName}>You</span>
               <span className={styles.timestamp}>4:18 PM</span>
             </div>
             <p className={styles.msgText}>
@@ -114,13 +190,16 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
               and email said it&apos;s too big.
             </p>
           </div>
-        </div>
+        </AnimatedMsg>
 
         {/* Message 2: Right (The Lyga Solution) */}
-        <div className={`${styles.msgRow} ${styles.msgRight}`}>
+        <AnimatedMsg side="right" delayMs={120}>
           <div className={styles.bubbleOutgoing}>
             <div className={styles.senderMetaOutgoing}>
               <span>Lyga</span>
+              <span className={styles.ticks} aria-hidden="true">
+                4:18 PM ✓✓
+              </span>
             </div>
             <p className={styles.outgoingLead}>Send it with Lyga instead.</p>
             <ul className={styles.outgoingList}>
@@ -140,28 +219,35 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>No clunky cables, no email limits, zero quality loss</span>
+                <span>No clunky cables or email limits</span>
+              </li>
+              <li>
+                <span className={styles.outgoingTick} aria-hidden="true">
+                  ✓✓
+                </span>
+                <span>Zero quality loss</span>
               </li>
             </ul>
           </div>
-        </div>
+        </AnimatedMsg>
 
         {/* Message 3: Left Question from iPhone 16 */}
-        <div className={`${styles.msgRow} ${styles.msgLeft}`}>
+        <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
-              <span className={styles.senderName}>iPhone 16</span>
+              <span className={styles.senderName}>You</span>
               <span className={styles.timestamp}>4:19 PM</span>
             </div>
             <p className={styles.msgText}>
-              Okay, but why wouldn&apos;t I just use WhatsApp, email, or another sharing app?
+              Okay, but why wouldn&apos;t I just message myself, use email, or try another sharing
+              app?
             </p>
           </div>
-        </div>
+        </AnimatedMsg>
 
-        {/* Message 4: Lyga Reply Rich Card (Comparison) */}
-        <div id="compare" ref={compareRef} className={`${styles.msgRow} ${styles.msgRight}`}>
-          <div className={styles.compareMsgCard}>
+        {/* Message 4: Lyga Reply Rich Card (1-vs-1 Tabbed Comparison) */}
+        <AnimatedMsg side="right" id="compare" delayMs={100}>
+          <div ref={compareRef} className={styles.compareMsgCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
               <span className={styles.timestamp}>4:19 PM ✓✓</span>
@@ -170,93 +256,220 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
               Built for the gap between your phone and computer
             </h2>
 
-            <div className={styles.tableWrap}>
-              <table className={styles.table}>
-                <thead>
-                  <tr>
-                    <th>What matters</th>
-                    <th>WhatsApp</th>
-                    <th>Email</th>
-                    <th>File sharing apps</th>
-                    <th className={styles.lygaHeader}>LYGA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {COMPARE_ROWS.map((row) => (
-                    <tr key={row.feature}>
-                      <td className={styles.featureCell}>{row.feature}</td>
-                      {[row.whatsapp, row.email, row.apps].map((cell, idx) => (
-                        <td key={idx}>
-                          <div>{cell.text}</div>
-                          {typeof cell.pct === 'number' && (
-                            <div className={styles.barTrack} aria-hidden="true">
-                              <div
-                                className={`${styles.barFill} ${
-                                  barsVisible ? styles.barVisible : ''
-                                }`}
-                                style={{ width: `${cell.pct}%` }}
-                              />
-                            </div>
-                          )}
-                        </td>
-                      ))}
-                      <td className={styles.lygaCol}>
-                        <div className={styles.lygaCellRow}>
-                          <span className={styles.lygaTick} aria-hidden="true">
-                            ✓✓
-                          </span>
-                          <span>{row.lyga.text}</span>
+            <div
+              className={styles.compareTabs}
+              role="tablist"
+              aria-label="Compare Lyga against"
+            >
+              {COMPETITOR_TABS.map((tab) => {
+                const isSelected = activeCompetitor === tab.key;
+                return (
+                  <button
+                    key={tab.key}
+                    type="button"
+                    role="tab"
+                    aria-selected={isSelected}
+                    className={`${styles.compareTab} ${
+                      isSelected ? styles.compareTabActive : ''
+                    }`}
+                    onClick={() => setActiveCompetitor(tab.key)}
+                  >
+                    {tab.tabLabel}
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className={styles.comparePairCard} role="tabpanel">
+              <div className={styles.comparePairHeader}>
+                <div className={styles.comparePairLabelHeader}>What matters</div>
+                <div className={styles.comparePairThemHeader}>{selectedCompetitor.name}</div>
+                <div className={styles.comparePairLygaHeader}>
+                  <span className={styles.lygaHeaderTick} aria-hidden="true">
+                    ✓✓
+                  </span>
+                  <span>LYGA</span>
+                </div>
+              </div>
+
+              {COMPARE_ROWS.map((row) => {
+                const compCell = row[activeCompetitor];
+                return (
+                  <div key={row.feature} className={styles.comparePairGroup}>
+                    <div className={styles.comparePairQuestion}>{row.feature}</div>
+                    <div className={styles.comparePairThemCell}>
+                      <div>{compCell.text}</div>
+                      {typeof compCell.pct === 'number' && (
+                        <div className={styles.barTrack} aria-hidden="true">
+                          <div
+                            className={`${styles.barFill} ${
+                              barsVisible ? styles.barVisible : ''
+                            }`}
+                            style={{ width: `${compCell.pct}%` }}
+                          />
                         </div>
-                        {typeof row.lyga.pct === 'number' && (
-                          <div className={styles.barTrack} aria-hidden="true">
-                            <div
-                              className={`${styles.barFillLyga} ${
-                                barsVisible ? styles.barVisible : ''
-                              }`}
-                              style={{ width: `${row.lyga.pct}%` }}
-                            />
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      )}
+                    </div>
+                    <div className={styles.comparePairLygaCell}>
+                      <div className={styles.lygaCellRow}>
+                        <span className={styles.lygaTick} aria-hidden="true">
+                          ✓✓
+                        </span>
+                        <span>{row.lyga.text}</span>
+                      </div>
+                      {typeof row.lyga.pct === 'number' && (
+                        <div className={styles.barTrack} aria-hidden="true">
+                          <div
+                            className={`${styles.barFillLyga} ${
+                              barsVisible ? styles.barVisible : ''
+                            }`}
+                            style={{ width: `${row.lyga.pct}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
+        </AnimatedMsg>
 
-        {/* Message 5: Left Price Objection from iPhone 16 */}
-        <div className={`${styles.msgRow} ${styles.msgLeft}`}>
+        {/* Message 5: Left Security Question from iPhone 16 */}
+        <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
-              <span className={styles.senderName}>iPhone 16</span>
+              <span className={styles.senderName}>You</span>
               <span className={styles.timestamp}>4:20 PM</span>
             </div>
             <p className={styles.msgText}>
-              Sounds good, I bet it&apos;s really expensive though?
+              Wait, can anyone else see my photos or files?
             </p>
           </div>
-        </div>
+        </AnimatedMsg>
 
-        {/* Message 6: Right Reply Card (Pricing) */}
-        <div id="pricing" className={`${styles.msgRow} ${styles.msgRight}`}>
-          <div className={styles.pricingMsgCard}>
+        {/* Message 6: Right Reply Card (Security) */}
+        <AnimatedMsg side="right" id="security" delayMs={100}>
+          <div className={styles.securityMsgCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
               <span className={styles.timestamp}>4:20 PM ✓✓</span>
             </div>
             <div className={styles.pricingMsgHeader}>
               <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
-                Not at all — simple pricing
+                Nobody can see them. Not even us.
               </h2>
-              <span className={styles.cardBadge}>No card required today</span>
+              <span className={styles.securityBadge}>
+                <Lock size={11} strokeWidth={2.2} aria-hidden="true" />
+                <span>Only for your devices</span>
+              </span>
+            </div>
+
+            <div className={styles.securitySplit} aria-label="What you see versus what Lyga sees">
+              <div className={styles.securitySplitYou}>
+                <div className={styles.securitySplitLabelYou}>What you see</div>
+                <div className={styles.securityPreviewCard}>
+                  <div className={styles.securityPreviewIconYou} aria-hidden="true">
+                    4K
+                  </div>
+                  <div className={styles.securityPreviewMeta}>
+                    <div className={styles.securityPreviewName}>Vacation_clip.mov</div>
+                    <div className={styles.securityPreviewSub}>1.2 GB · Original quality</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.securitySplitBridge} aria-hidden="true">
+                <Lock size={12} strokeWidth={2.3} />
+              </div>
+
+              <div className={styles.securitySplitServer}>
+                <div className={styles.securitySplitLabelServer}>What Lyga sees</div>
+                <div className={styles.securityPreviewCardDark}>
+                  <div className={styles.securityPreviewIconServer} aria-hidden="true">
+                    <Lock size={14} strokeWidth={2.2} />
+                  </div>
+                  <div className={styles.securityPreviewMeta} style={{ flex: 1 }}>
+                    <div className={styles.securityRedactBar} aria-hidden="true" />
+                    <div className={styles.securityPreviewSubDark}>File &amp; name hidden</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className={styles.securityList}>
+              <div className={styles.securityItem}>
+                <span className={styles.checkTick} aria-hidden="true">
+                  ✓✓
+                </span>
+                <div>
+                  <div className={styles.securityItemTitle}>End-to-end encrypted</div>
+                  <p className={styles.securityItemDesc}>
+                    Your phone and computer lock everything before it&apos;s sent. We deliver it,
+                    but we can&apos;t see your files, notes, or even file names.
+                  </p>
+                </div>
+              </div>
+
+              <div className={styles.securityItem}>
+                <span className={styles.checkTick} aria-hidden="true">
+                  ✓✓
+                </span>
+                <div>
+                  <div className={styles.securityItemTitle}>Private to your devices only</div>
+                  <p className={styles.securityItemDesc}>
+                    Your files and notes only appear on the phone and computer you&apos;re signed
+                    into. Nobody else can view or open what you send.
+                  </p>
+                </div>
+              </div>
+
+              <div className={styles.securityItem}>
+                <span className={styles.checkTick} aria-hidden="true">
+                  ✓✓
+                </span>
+                <div>
+                  <div className={styles.securityItemTitle}>We don&apos;t keep what you delete</div>
+                  <p className={styles.securityItemDesc}>
+                    Delete a file with one tap and it&apos;s wiped from our servers right away. We
+                    never keep hidden copies or backups.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </AnimatedMsg>
+
+        {/* Message 7: Left Price Objection from iPhone 16 */}
+        <AnimatedMsg side="left">
+          <div className={styles.bubbleIncoming}>
+            <div className={styles.senderMeta}>
+              <span className={styles.senderName}>You</span>
+              <span className={styles.timestamp}>4:21 PM</span>
+            </div>
+            <p className={styles.msgText}>
+              Sounds good, I bet it&apos;s really expensive though?
+            </p>
+          </div>
+        </AnimatedMsg>
+
+        {/* Message 8: Right Reply Card (Pricing) */}
+        <AnimatedMsg side="right" id="pricing" delayMs={100}>
+          <div className={styles.pricingMsgCard}>
+            <div className={styles.senderMeta}>
+              <span className={styles.senderName}>Lyga</span>
+              <span className={styles.timestamp}>4:21 PM ✓✓</span>
+            </div>
+            <div className={styles.pricingMsgHeader}>
+              <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
+                Not at all. Here&apos;s the pricing.
+              </h2>
             </div>
 
             <div className={styles.pricingGrid}>
               <div className={styles.planCard}>
                 <div>
-                  <h3 className={styles.planName}>Starter (Free)</h3>
+                  <h3 className={styles.planName}>Free</h3>
                   <div className={styles.priceRow}>
                     <span className={styles.price}>£0</span>
                     <span className={styles.priceUnit}>/ month</span>
@@ -264,11 +477,11 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   <div className={styles.statStrip}>
                     <div>
                       <div className={styles.statVal}>500 MB</div>
-                      <div className={styles.statLabel}>Max file</div>
+                      <div className={styles.statLabel}>Per file</div>
                     </div>
                     <div>
                       <div className={styles.statVal}>7 days</div>
-                      <div className={styles.statLabel}>Auto-expiry</div>
+                      <div className={styles.statLabel}>Files kept</div>
                     </div>
                     <div>
                       <div className={styles.statVal}>2</div>
@@ -277,16 +490,22 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   </div>
                   <ul className={styles.checkList}>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />
-                      Unlimited text, links, and code snippets
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>Unlimited notes and links</span>
                     </li>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />2 GB
-                      active rolling file storage
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>2 GB of space for recent files</span>
                     </li>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />
-                      End-to-end encrypted browser feed
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>Encrypted in your browser before upload</span>
                     </li>
                   </ul>
                 </div>
@@ -304,8 +523,8 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
               <div className={`${styles.planCard} ${styles.planCardPro}`}>
                 <div>
                   <div className={styles.planHeader}>
-                    <h3 className={styles.planName}>Pro Founder Spot</h3>
-                    <span className={styles.earlyBadge}>Early Bird</span>
+                    <h3 className={styles.planName}>Pro</h3>
+                    <span className={styles.earlyBadge}>Founder Rate</span>
                   </div>
                   <div className={styles.priceRow}>
                     <span className={styles.price}>£5</span>
@@ -315,11 +534,11 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   <div className={styles.statStrip}>
                     <div>
                       <div className={styles.statVal}>5 GB</div>
-                      <div className={styles.statLabel}>Max file</div>
+                      <div className={styles.statLabel}>Per file</div>
                     </div>
                     <div>
                       <div className={styles.statVal}>100 GB</div>
-                      <div className={styles.statLabel}>Vault</div>
+                      <div className={styles.statLabel}>Storage</div>
                     </div>
                     <div>
                       <div className={styles.statVal}>5</div>
@@ -328,16 +547,22 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   </div>
                   <ul className={styles.checkList}>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />
-                      Everything in Starter, plus 5 GB uncompressed uploads
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>Send 5 GB files with zero quality loss</span>
                     </li>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />
-                      100 GB persistent encrypted vault
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>100 GB storage that never expires</span>
                     </li>
                     <li>
-                      <Check size={15} color="var(--accent-primary)" aria-hidden="true" />
-                      Expiring Drop Links &amp; 1-click HEIC to JPG
+                      <span className={styles.checkTick} aria-hidden="true">
+                        ✓✓
+                      </span>
+                      <span>Send anytime, even when your PC is asleep</span>
                     </li>
                   </ul>
                 </div>
@@ -348,32 +573,67 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                     className={styles.pressBtn}
                     onClick={() => onSelectPlan('pro_founder')}
                   >
-                    Claim £5/mo Founder Spot
+                    Lock in £5/mo Founder Rate
                   </Button>
-                  <p className={styles.ctaNote}>No card required today. Locks in £5/mo at launch.</p>
+                  <p className={styles.ctaNote}>No card needed today. Your £5/mo rate stays locked.</p>
                 </div>
               </div>
             </div>
           </div>
-        </div>
+        </AnimatedMsg>
 
-        {/* Message 5: Left FAQ Bubble */}
-        <div id="faq" className={`${styles.msgRow} ${styles.msgLeftWide}`}>
+        {/* Message 9: Left FAQ Prompt from You */}
+        <AnimatedMsg side="left">
+          <div className={styles.bubbleIncoming}>
+            <div className={styles.senderMeta}>
+              <span className={styles.senderName}>You</span>
+              <span className={styles.timestamp}>4:22 PM</span>
+            </div>
+            <p className={styles.msgText}>
+              I&apos;m ready to join, just got a few quick questions.
+            </p>
+          </div>
+        </AnimatedMsg>
+
+        {/* Message 10: Right FAQ Reply Bubble */}
+        <AnimatedMsg side="right" id="faq" delayMs={100}>
           <div className={styles.faqCard}>
             <div className={styles.senderMeta}>
-              <span className={styles.senderName}>Questions</span>
-              <span className={styles.timestamp}>Before you join</span>
+              <span className={styles.senderName}>Lyga</span>
+              <span className={styles.timestamp}>4:22 PM ✓✓</span>
             </div>
-            <Accordion variant="separated" radius={0}>
-              {FAQS.map((item) => (
-                <Accordion.Item key={item.value} value={item.value}>
-                  <Accordion.Control>{item.question}</Accordion.Control>
-                  <Accordion.Panel>{item.answer}</Accordion.Panel>
-                </Accordion.Item>
-              ))}
-            </Accordion>
+            <h2 className={styles.compareMsgTitle}>Of course. Here&apos;s what to know.</h2>
+            <div className={styles.faqList}>
+              {FAQS.map((item) => {
+                const isOpen = openFaq === item.value;
+                return (
+                  <div
+                    key={item.value}
+                    className={`${styles.faqItem} ${isOpen ? styles.faqItemOpen : ''}`}
+                  >
+                    <button
+                      type="button"
+                      className={styles.faqTrigger}
+                      aria-expanded={isOpen}
+                      onClick={() => setOpenFaq(isOpen ? null : item.value)}
+                    >
+                      <span>{item.question}</span>
+                      <ChevronDown
+                        size={16}
+                        strokeWidth={2}
+                        aria-hidden="true"
+                        className={`${styles.faqChevron} ${
+                          isOpen ? styles.faqChevronOpen : ''
+                        }`}
+                      />
+                    </button>
+                    {isOpen && <p className={styles.faqAnswer}>{item.answer}</p>}
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        </AnimatedMsg>
       </div>
     </section>
   );

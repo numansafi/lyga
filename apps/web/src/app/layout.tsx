@@ -23,8 +23,21 @@ const jetbrainsMono = JetBrains_Mono({
 const theme = createTheme({
   fontFamily: 'var(--font-sans), -apple-system, BlinkMacSystemFont, sans-serif',
   fontFamilyMonospace: 'var(--font-mono), monospace',
-  primaryColor: 'crimson',
+  primaryColor: 'spruce',
   colors: {
+    spruce: [
+      '#f0fdfa',
+      '#ccfbf1',
+      '#99f6e4',
+      '#5eead4',
+      '#2dd4bf',
+      '#14b8a6',
+      '#115e59',
+      '#0d4743',
+      '#093633',
+      '#042220',
+    ],
+    // Saved alternate presets
     crimson: [
       '#fff1f3',
       '#fde0e4',
@@ -54,10 +67,23 @@ const theme = createTheme({
   defaultRadius: 'md',
 });
 
+const SITE_TITLE = 'Lyga — DM yourself the important stuff';
+const SITE_DESCRIPTION =
+  'Send full-size videos, photos, and any file between your phone and computer in one encrypted timeline.';
+
 export const metadata: Metadata = {
-  title: 'Lyga — DM yourself the important stuff',
-  description:
-    'Send full-size videos, photos, and any file between your phone and computer in one encrypted feed.',
+  title: SITE_TITLE,
+  description: SITE_DESCRIPTION,
+  openGraph: {
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+  },
 };
 
 export default function RootLayout({

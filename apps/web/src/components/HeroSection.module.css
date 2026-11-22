@@ -1,5 +1,8 @@
 .section {
-  background-color: var(--accent-primary);
+  background-color: #0e4e49;
+  background-image:
+    radial-gradient(ellipse 80% 45% at 50% 100%, rgba(94, 234, 212, 0.18), transparent 70%),
+    linear-gradient(180deg, #072b28 0%, #0e4e49 45%, #16776f 100%);
   color: #ffffff;
   min-height: 480px;
   display: flex;
@@ -101,6 +104,34 @@
 .step1 {
   align-self: center;
   animation: dmPopIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+}
+
+.heroCta {
+  appearance: none;
+  margin-top: 2px;
+  padding: 9px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 999px;
+  background-color: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+  transition:
+    transform 120ms ease-out,
+    background-color 150ms ease,
+    border-color 150ms ease;
+}
+
+.heroCta:hover {
+  background-color: rgba(255, 255, 255, 0.16);
+  border-color: rgba(255, 255, 255, 0.65);
+}
+
+.heroCta:active {
+  transform: scale(0.97);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -15,9 +15,6 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
           LYGA
         </a>
         <nav className={styles.nav} aria-label="Primary">
-          <a href="#compare" className={styles.link}>
-            Compare
-          </a>
           <a href="#pricing" className={styles.link}>
             Pricing
           </a>

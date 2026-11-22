@@ -26,7 +26,7 @@ export default function HomePage() {
     <>
       <LandingHeader onOpenWaitlist={() => openWaitlist('free', 'hero')} />
       <main>
-        <HeroSection />
+        <HeroSection onOpenWaitlist={() => openWaitlist('free', 'hero')} />
         <DmFeedSection onSelectPlan={(plan) => openWaitlist(plan, plan)} />
       </main>
       <footer
@@ -39,7 +39,7 @@ export default function HomePage() {
         }}
       >
         <strong style={{ color: 'var(--text-primary)', letterSpacing: '0.03em' }}>LYGA</strong> ·
-        Built for iPhone + Windows · Encrypted in your browser
+        Built for phone and computer · Encrypted in your browser
       </footer>
       <WaitlistModal
         opened={modalOpened}

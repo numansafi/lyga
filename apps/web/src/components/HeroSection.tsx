@@ -3,7 +3,11 @@
 import { FileText, Film } from 'lucide-react';
 import styles from './HeroSection.module.css';
 
-export function HeroSection() {
+interface HeroSectionProps {
+  onOpenWaitlist: () => void;
+}
+
+export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
   return (
     <section className={styles.section}>
       <div className={styles.inner}>
@@ -61,6 +65,10 @@ export function HeroSection() {
               ✓✓
             </span>
           </p>
+
+          <button type="button" className={styles.heroCta} onClick={onOpenWaitlist}>
+            Join Early Access →
+          </button>
         </div>
       </div>
     </section>

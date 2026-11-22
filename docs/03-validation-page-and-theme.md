@@ -15,10 +15,10 @@ Lyga is an everyday utility for creators and cross-device users. The interface f
 | `--border-subtle` | `#E5E7EB` | Tactile 1px borders on cards, tabs, and inputs (no soft grey drop shadows) |
 | `--text-primary` | `#111827` | Headings, primary labels, item titles |
 | `--text-secondary` | `#4B5563` | Body copy, subheadlines, helper text |
-| `--accent-primary` | `#A51C30` | Official Harvard Crimson accent (buttons, hero, Pro card border) |
-| `--accent-primary-hover` | `#821625` | Hover state for primary buttons |
-| `--accent-primary-tint` | `#FFF1F3` | Soft crimson tint for Early Bird badge and active chips |
-| *(Saved preset)* | `#E14D2A` | Alternate Electric Vermilion preset (`[data-accent="vermilion"]`) |
+| `--accent-primary` | `#115E59` | Official Deep Spruce accent (buttons, hero, Pro card border) |
+| `--accent-primary-hover` | `#0D4743` | Hover state for primary buttons |
+| `--accent-primary-tint` | `#F0FDFA` | Soft spruce tint for Early Bird badge and active chips |
+| *(Saved presets)* | `#A51C30`, `#E14D2A` | Alternate Harvard Crimson & Electric Vermilion presets |
 | `--status-encrypted-bg` | `#D1FAE5` | Background for the "Encrypted" badge |
 | `--status-encrypted-text` | `#065F46` | Text for the "Encrypted" badge (WCAG AA/AAA compliant) |
 
