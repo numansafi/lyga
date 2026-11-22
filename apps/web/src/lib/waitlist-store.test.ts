@@ -60,9 +60,21 @@ describe('waitlist-store', () => {
         () => saveWaitlistSignup('prod@example.com', 'free'),
         /Supabase environment variables are required in production/
       );
+
+      process.env.LYGA_LOCAL_WAITLIST = 'true';
+      const localAllowed = await saveWaitlistSignup('prod@example.com', 'free');
+      assert.equal(localAllowed.email, 'prod@example.com');
     } finally {
       (process.env as Record<string, string | undefined>).NODE_ENV = prevEnv;
       process.env.LYGA_LOCAL_WAITLIST = prevLocal;
     }
+  });
+
+  it('no-ops cleanly when updating feedback for an unknown email', async () => {
+    const { updateWaitlistFeedback } = await import('./waitlist-store.ts');
+    await updateWaitlistFeedback('missing@example.com', 'Android + Mac', 'Large RAW files');
+    const raw = await readFile(path.join(tempDir, 'waitlist.json'), 'utf8');
+    const entries = JSON.parse(raw) as Array<{ email: string }>;
+    assert.equal(entries.some((e) => e.email === 'missing@example.com'), false);
   });
 });

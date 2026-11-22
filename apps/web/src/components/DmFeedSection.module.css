@@ -34,10 +34,6 @@
   text-align: center;
 }
 
-.statusDevices {
-  white-space: nowrap;
-}
-
 .msgRow {
   display: flex;
   width: 100%;
@@ -79,11 +75,6 @@
 
 .msgRight {
   justify-content: flex-end;
-}
-
-.msgFull,
-.msgLeftWide {
-  justify-content: stretch;
 }
 
 .bubbleIncoming {
@@ -337,7 +328,7 @@
 
 .securityPreviewSubDark {
   font-size: 11px;
-  color: #9ca3af;
+  color: var(--text-secondary);
 }
 
 .securityList {
@@ -381,23 +372,6 @@
   color: var(--text-primary);
 }
 
-.compareMsgSubtitle {
-  margin: 0 0 12px;
-  font-size: 13.5px;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
-.pricingMsgCard {
-  width: 100%;
-  max-width: 760px;
-  background-color: var(--bg-page);
-  border: 1.5px solid var(--accent-primary);
-  border-radius: 18px 18px 4px 18px;
-  padding: 16px 18px;
-  box-shadow: 0 2px 10px rgba(17, 94, 89, 0.08);
-}
-
 .pricingMsgHeader {
   display: flex;
   flex-wrap: wrap;
@@ -405,49 +379,6 @@
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 14px;
-}
-
-.richCard {
-  width: 100%;
-  background-color: var(--bg-page);
-  border: 1.5px solid var(--border-subtle);
-  border-radius: 18px;
-  padding: 26px;
-  box-shadow: 0 2px 10px rgba(17, 24, 39, 0.04);
-}
-
-.cardHeader {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-  margin-bottom: 20px;
-}
-
-.cardEyebrow {
-  font-family: var(--font-mono), monospace;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--accent-primary);
-  margin-bottom: 4px;
-}
-
-.cardTitle {
-  margin: 0;
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  color: var(--text-primary);
-}
-
-.cardBadge {
-  flex-shrink: 0;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background-color: var(--accent-primary-tint);
-  color: var(--accent-primary);
 }
 
 .compareTabs {
@@ -473,6 +404,11 @@
 .compareTab:hover {
   color: var(--text-primary);
   border-color: #d1d5db;
+}
+
+.compareTab:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
 }
 
 .compareTabActive {
@@ -828,11 +764,6 @@
     padding: 36px 16px 56px;
   }
 
-  .cardHeader {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-
   .pricingGrid {
     grid-template-columns: 1fr;
   }
@@ -840,8 +771,7 @@
   .compareMsgCard,
   .securityMsgCard,
   .pricingMsgCard,
-  .faqCard,
-  .richCard {
+  .faqCard {
     padding: 16px;
   }
 

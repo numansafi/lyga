@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Button, Modal, TextInput } from '@mantine/core';
 import { trackEvent, type WaitlistPlan } from '@/lib/analytics';
 import { validateWaitlistEmail } from '@/lib/email-validation';
@@ -30,6 +30,7 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
   const [painNote, setPainNote] = useState('');
   const [savingDone, setSavingDone] = useState(false);
   const [noteError, setNoteError] = useState<string | null>(null);
+  const syncAbortRef = useRef<AbortController | null>(null);
 
   const handleResetAndClose = () => {
     setError(null);
@@ -81,9 +82,14 @@ export function WaitlistModal({ opened, plan, onClose }: WaitlistModalProps) {
     trackEvent('device_combo_selected', { combo });
     if (!submittedEmail) return;
 
+    syncAbortRef.current?.abort();
+    const controller = new AbortController();
+    syncAbortRef.current = controller;
+
     await fetch('/api/waitlist', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({ email: submittedEmail, deviceCombo: combo, painNote }),
     }).catch(() => undefined);
   };
