@@ -1,7 +1,9 @@
 # Step 1: Problem, Target User, and 48-Hour Validation
 
 ## 1. Who We Are Building For
-**Primary wedge:** iPhone users on Windows PCs (creators, video editors, photographers, and freelancers) who regularly move large media and links between phone and computer.
+**Broad product fit:** Any user moving full-size media, links, code, and files between **any phone and any computer** (iOS, Android, Windows, Mac, Linux) in a browser—not limited to iPhone + Windows.
+
+**Outreach wedge:** iPhone users on Windows PCs (creators, video editors, photographers, and freelancers) feel the sharpest gap because AirDrop doesn't work on Windows. Keep homepage copy broad (`phone and computer`) and tailor specific community posts to `iPhone + Windows`, letting PostHog's `device_combo_selected` show which setup converts best.
 
 **The problem:** Moving full-resolution 4K videos, RAW photos, links, and code snippets from an iPhone to a Windows PC still takes too many steps. Messaging apps shrink photos and cap videos. Email and cloud drives feel slow for quick drops and cap attachments at 25 MB. Local-only tools like LocalSend and PairDrop break when devices are on different Wi-Fi networks or when a laptop is asleep.
 

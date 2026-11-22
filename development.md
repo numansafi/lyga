@@ -4,7 +4,7 @@
 
 ## Product Overview & Positioning
 **Lyga** is a personal cross-device encrypted feed ("DM yourself the important stuff") for moving full-size 4K videos, photos, links, code snippets, and files between phone and computer without desktop installs or media compression.
-- **Primary Wedge:** iPhone + Windows creators, video editors, photographers, and freelancers.
+- **Positioning:** Platform-agnostic **phone ↔ computer** on the homepage (iOS, Android, Windows, Mac, Linux); `iPhone + Windows` is used as a targeted outreach wedge, with real demand measured via `device_combo_selected`.
 - **Tiers:**
   - **Starter (Free — £0/mo):** Unlimited text, links & code; files up to 500 MB each; 2 GB active storage; 7-day rolling auto-expiry; 2 paired devices.
   - **Pro (£5/mo Early Bird / £8/mo Standard):** Files up to 5 GB; 100 GB persistent vault; up to 5 paired devices; public Drop Links; 1-click HEIC → JPG conversion.
@@ -42,6 +42,7 @@
 | 2026-11-21 | **"Daylight Studio Utility"** light theme (`#FFFFFF`, `#F6F7F9`, `#115E59` Deep Spruce official accent, `#065F46`/`#D1FAE5`; Harvard Crimson `#A51C30` & Electric Vermilion `#E14D2A` saved as alternate presets) | High-trust editorial contrast (7.6:1 AAA on white) while avoiding generic dark-mode or blue cloud templates. |
 
 | 2026-11-22 | Redesigned landing feed into a **DM-style thread (`DmFeedSection`)** with 1-vs-1 tabbed comparison (`vs. Messaging yourself` default), redacted-bar security split, double-tick pricing, and hairline FAQ accordion | Keeps the entire landing experience cohesive with the "DM yourself" metaphor while eliminating mobile horizontal scroll and technical jargon. |
+| 2026-11-22 | Keep homepage copy platform-agnostic (**phone and computer**), using `iPhone + Windows` only as an outreach wedge | Prevents Android/Mac/Linux visitors from bouncing on the landing page while still letting PostHog `device_combo_selected` measure which setup converts best. |
 
 ## Changelog
 - **2026-11-22:** Added full Lyga brand & logo kit (`brand/` SVGs, PNGs, `1200×630` OG banner, `brand/README.md`), `apps/web/public/` favicons (`favicon.ico`, `#14B8A6` `favicon.svg`, PWA icons, `site.webmanifest`), `layout.tsx` icon/OG image metadata, and `30×30` white logo mark in `LandingHeader.tsx`.
