@@ -72,6 +72,7 @@ const SITE_DESCRIPTION =
   'Send full-size videos, photos, and any file between your phone and computer in one encrypted timeline.';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   manifest: '/site.webmanifest',
