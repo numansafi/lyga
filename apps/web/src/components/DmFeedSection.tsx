@@ -207,7 +207,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>From phone to PC in milliseconds</span>
+                <span>Scan a QR code to connect</span>
               </li>
               <li>
                 <span className={styles.outgoingTick} aria-hidden="true">
@@ -219,13 +219,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>No clunky cables or email limits</span>
-              </li>
-              <li>
-                <span className={styles.outgoingTick} aria-hidden="true">
-                  ✓✓
-                </span>
-                <span>Zero quality loss</span>
+                <span>4K videos &amp; files at full quality</span>
               </li>
             </ul>
           </div>
@@ -429,7 +423,9 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   ✓✓
                 </span>
                 <div>
-                  <div className={styles.securityItemTitle}>We don&apos;t keep what you delete</div>
+                  <div className={styles.securityItemTitle}>
+                    Delete a file and it&apos;s gone immediately
+                  </div>
                   <p className={styles.securityItemDesc}>
                     Delete a file with one tap and it&apos;s wiped from our servers right away. We
                     never keep hidden copies or backups.
@@ -462,7 +458,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
             </div>
             <div className={styles.pricingMsgHeader}>
               <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
-                Not at all. Here&apos;s the pricing.
+                Start free. Lock in £5/mo Pro with no card today.
               </h2>
             </div>
 

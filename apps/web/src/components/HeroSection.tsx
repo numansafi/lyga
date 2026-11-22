@@ -60,7 +60,7 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
           <h1 className={styles.headline}>DM yourself the important stuff.</h1>
 
           <p className={`${styles.bubble} ${styles.bubbleRight} ${styles.step1}`}>
-            Send full-size videos, photos, and any file between your phone and computer.
+            Send 4K videos, photos, and any file between your phone and computer.
             <span className={`${styles.receipt} ${styles.receipt1}`} aria-hidden="true">
               ✓✓
             </span>
@@ -69,6 +69,10 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
           <button type="button" className={styles.heroCta} onClick={onOpenWaitlist}>
             Join Early Access →
           </button>
+
+          <p className={styles.heroNote}>
+            No card today. Join free or lock in £5/mo Pro.
+          </p>
         </div>
       </div>
     </section>
