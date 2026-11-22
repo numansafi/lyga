@@ -1,7 +1,7 @@
 # Product Marketing Context
 
 **Document version:** v1
-**Last updated:** 2026-11-21
+**Last updated:** 2026-11-22
 
 ## Product Overview
 **One-liner:** DM yourself the important stuff. Send full-size videos, photos, and any file between your phone and computer.
@@ -14,7 +14,8 @@
 - **Lifetime Deal (optional launch):** £79 one-time (unlimited local Wi-Fi P2P transfers, 25 GB persistent vault)
 
 ## Target Audience
-**Primary wedge:** iPhone users on Windows PCs (especially creators, video editors, photographers, and freelancers) who regularly move large media and links between phone and computer.
+**Homepage positioning:** Platform-agnostic (**any phone to any computer** — iOS, Android, Windows, Mac, Linux) so visitors on any setup don't bounce thinking Lyga isn't for them.
+**Distribution wedge:** iPhone users on Windows PCs (creators, video editors, photographers, and freelancers) who feel the sharpest AirDrop gap, used for targeted outreach posts while measuring actual demand via `device_combo_selected`.
 **Secondary audience:** Developers and multi-device users moving code snippets, `.zip` archives, and screenshots across iOS, Android, Windows, Mac, and Linux.
 **Primary use case:** Moving uncompressed 4K videos, RAW photos, and quick links from phone to PC (and back) without compression or size limits.
 **Jobs to be done:**

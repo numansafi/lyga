@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="48 50 160 176" width="300" height="300">
+  <title>Lyga</title>
+  <path
+    fill="none"
+    stroke="#14B8A6"
+    stroke-width="28"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    d="M64 94L92 66v116h100l-28 28"
+  />
+</svg>

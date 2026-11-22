@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <title>Lyga — DM yourself the important stuff</title>
+  <defs>
+    <linearGradient id="ogBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#072B28" />
+      <stop offset="50%" stop-color="#0E4E49" />
+      <stop offset="100%" stop-color="#16776F" />
+    </linearGradient>
+    <radialGradient id="ogGlow" cx="50%" cy="100%" r="75%">
+      <stop offset="0%" stop-color="#5EEAD4" stop-opacity="0.22" />
+      <stop offset="70%" stop-color="#5EEAD4" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#ogBg)" />
+  <rect width="1200" height="630" fill="url(#ogGlow)" />
+  <!-- Brand Mark -->
+  <g transform="translate(100, 175) scale(0.8)">
+    <rect x="20" y="20" width="216" height="216" rx="52" fill="#FFFFFF" />
+    <path
+      fill="none"
+      stroke="#115E59"
+      stroke-width="28"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+      d="M64 94L92 66v116h100l-28 28"
+    />
+  </g>
+  <!-- Title & Tagline -->
+  <text
+    x="340"
+    y="256"
+    fill="#FFFFFF"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif"
+    font-size="44"
+    font-weight="800"
+    letter-spacing="3"
+  >LYGA</text>
+  <text
+    x="340"
+    y="330"
+    fill="#FFFFFF"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif"
+    font-size="48"
+    font-weight="700"
+  >DM yourself the important stuff.</text>
+  <text
+    x="340"
+    y="392"
+    fill="#CCFBF1"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif"
+    font-size="24"
+    font-weight="500"
+  >Full-size videos, photos &amp; files between phone and PC.</text>
+  <text
+    x="340"
+    y="428"
+    fill="#99F6E4"
+    font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, sans-serif"
+    font-size="22"
+    font-weight="500"
+  >End-to-end encrypted · No compression</text>
+</svg>
