@@ -65,11 +65,13 @@ function isExpired(item: FeedItemRecord, nowMs: number): boolean {
 }
 
 export async function createWorkspaceWithDevice(
-  deviceLabel = 'Browser'
+  deviceLabel = 'Browser',
+  userId?: string
 ): Promise<{ workspace: WorkspaceRecord; device: DeviceRecord }> {
   const now = new Date().toISOString();
   const workspace: WorkspaceRecord = {
     id: randomUUID(),
+    ...(userId ? { user_id: userId } : {}),
     pair_code: generatePairCode(),
     max_devices: FREE_MAX_DEVICES,
     storage_limit_bytes: FREE_MAX_STORAGE_BYTES,
@@ -99,6 +101,91 @@ export async function createWorkspaceWithDevice(
     await writeLocalData(data);
     return { workspace, device };
   });
+}
+
+export async function getOrCreateUserWorkspace(
+  userId: string,
+  deviceLabel = 'Desktop Browser'
+): Promise<{
+  workspace: WorkspaceRecord;
+  devices: DeviceRecord[];
+  items: FeedItemRecord[];
+  usedBytes: number;
+  deviceId: string;
+}> {
+  const supabase = getSupabaseAdmin();
+  const label = deviceLabel.slice(0, 40) || 'Desktop Browser';
+
+  if (supabase) {
+    const { data: existingWs } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('user_id', userId)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingWs) {
+      const ws = existingWs as WorkspaceRecord;
+      const { data: devs } = await supabase
+        .from('workspace_devices')
+        .select('*')
+        .eq('workspace_id', ws.id)
+        .order('created_at', { ascending: true });
+      const devList = (devs ?? []) as DeviceRecord[];
+      let activeDevice = devList[0];
+      if (!activeDevice) {
+        const now = new Date().toISOString();
+        const created: DeviceRecord = {
+          id: randomUUID(),
+          workspace_id: ws.id,
+          label,
+          created_at: now,
+          last_seen_at: now,
+        };
+        await supabase.from('workspace_devices').insert(created);
+        activeDevice = created;
+      }
+      const state = await getWorkspaceState(ws.id, activeDevice.id);
+      if (state) {
+        return { ...state, deviceId: activeDevice.id };
+      }
+    }
+
+    const { workspace, device } = await createWorkspaceWithDevice(label, userId);
+    return { workspace, devices: [device], items: [], usedBytes: 0, deviceId: device.id };
+  }
+
+  const existingId = await withLocalLock(async () => {
+    const data = await readLocalData();
+    const ws = data.workspaces.find((w) => w.user_id === userId);
+    if (!ws) return null;
+    let devs = data.devices.filter((d) => d.workspace_id === ws.id);
+    if (devs.length === 0) {
+      const now = new Date().toISOString();
+      const dev: DeviceRecord = {
+        id: randomUUID(),
+        workspace_id: ws.id,
+        label,
+        created_at: now,
+        last_seen_at: now,
+      };
+      data.devices.push(dev);
+      await writeLocalData(data);
+      devs = [dev];
+    }
+    return { workspaceId: ws.id, deviceId: devs[0].id };
+  });
+
+  if (existingId) {
+    const state = await getWorkspaceState(existingId.workspaceId, existingId.deviceId);
+    if (state) {
+      return { ...state, deviceId: existingId.deviceId };
+    }
+  }
+
+  const { workspace, device } = await createWorkspaceWithDevice(label, userId);
+  return { workspace, devices: [device], items: [], usedBytes: 0, deviceId: device.id };
 }
 
 export async function getWorkspaceState(

@@ -8,6 +8,7 @@ export type FeedItemKind = 'text' | 'link' | 'code' | 'media' | 'file';
 
 export interface WorkspaceRecord {
   id: string;
+  user_id?: string | null;
   pair_code: string;
   max_devices: number;
   storage_limit_bytes: number;

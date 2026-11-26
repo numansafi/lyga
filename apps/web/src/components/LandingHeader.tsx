@@ -78,7 +78,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
             className={styles.ctaButton}
             onClick={onOpenWaitlist}
           >
-            Join Early Access
+            Log in
           </Button>
         </div>
       </header>

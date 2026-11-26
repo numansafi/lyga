@@ -67,11 +67,11 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
           </p>
 
           <button type="button" className={styles.heroCta} onClick={onOpenWaitlist}>
-            Join Early Access →
+            Get started free →
           </button>
 
           <p className={styles.heroNote}>
-            No card today. Join free or lock in £5/mo Pro.
+            Free up to 500 MB/file. Sign in with Google or email.
           </p>
         </div>
       </div>

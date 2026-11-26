@@ -25,7 +25,19 @@ describe('mvp session & workspace-store', () => {
     const token = encodeSessionToken({ workspaceId: 'ws-1', deviceId: 'dev-1' });
     assert.deepEqual(decodeSessionToken(token), { workspaceId: 'ws-1', deviceId: 'dev-1' });
     assert.equal(decodeSessionToken(`${token}x`), null);
+    assert.equal(decodeSessionToken(`${token}.extra`), null);
     assert.equal(decodeSessionToken('malformed'), null);
+
+    const { encodeAuthToken, decodeAuthToken } = await import('./auth.ts');
+    const authToken = encodeAuthToken({ userId: 'user-1', email: 'u@example.com' });
+    const decodedAuth = decodeAuthToken(authToken);
+    assert.equal(decodedAuth?.userId, 'user-1');
+    assert.equal(decodedAuth?.email, 'u@example.com');
+    assert.equal(decodeAuthToken(token), null);
+    assert.equal(
+      decodeAuthToken(encodeAuthToken({ userId: 'user-1', email: 'u@example.com' }, -1000)),
+      null
+    );
   });
 
   it('creates a workspace, enforces 2-device cap, and manages feed items + caps', async () => {

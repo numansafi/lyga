@@ -88,9 +88,9 @@ const FAQS = [
   },
   {
     value: 'billing',
-    question: 'Will I be charged today if I pick the £5/mo Founder Rate?',
+    question: 'Do I need a credit card to get started?',
     answer:
-      "No. You don't enter a card today. Joining the waitlist just saves your £5/mo rate for when Pro launches.",
+      'No. Starter is completely free with 500 MB per file, 2 GB active storage, and 2 paired devices. Just sign in and start sending.',
   },
 ];
 
@@ -512,7 +512,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   className={styles.pressBtn}
                   onClick={() => onSelectPlan('free')}
                 >
-                  Join Free Waitlist
+                  Start Free →
                 </Button>
               </div>
 
@@ -569,9 +569,9 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                     className={styles.pressBtn}
                     onClick={() => onSelectPlan('pro_founder')}
                   >
-                    Lock in £5/mo Founder Rate
+                    Get Started →
                   </Button>
-                  <p className={styles.ctaNote}>No card needed today. Your £5/mo rate stays locked.</p>
+                  <p className={styles.ctaNote}>Start free today. Upgrade to Pro anytime.</p>
                 </div>
               </div>
             </div>

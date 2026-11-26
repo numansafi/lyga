@@ -16,22 +16,24 @@ function getSecret(): string {
   return 'lyga-local-dev-session-secret-change-in-prod';
 }
 
-function sign(payloadB64: string): string {
-  return createHmac('sha256', getSecret()).update(payloadB64).digest('base64url');
+function sign(purpose: string, payloadB64: string): string {
+  return createHmac('sha256', getSecret())
+    .update(`${purpose}:${payloadB64}`)
+    .digest('base64url');
 }
 
-export function encodeSessionToken(session: WorkspaceSession): string {
-  const payloadB64 = Buffer.from(JSON.stringify(session), 'utf8').toString('base64url');
-  const sig = sign(payloadB64);
-  return `${payloadB64}.${sig}`;
+export function encodeSignedToken<T extends object>(purpose: string, payload: T): string {
+  const payloadB64 = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+  return `${payloadB64}.${sign(purpose, payloadB64)}`;
 }
 
-export function decodeSessionToken(token: string | undefined | null): WorkspaceSession | null {
-  if (!token || !token.includes('.')) return null;
-  const [payloadB64, sig] = token.split('.');
-  if (!payloadB64 || !sig) return null;
+export function decodeSignedToken<T>(purpose: string, token: string | undefined | null): T | null {
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  const [payloadB64, sig] = parts;
 
-  const expected = sign(payloadB64);
+  const expected = sign(purpose, payloadB64);
   const sigBuf = Buffer.from(sig, 'utf8');
   const expBuf = Buffer.from(expected, 'utf8');
   if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) {
@@ -39,12 +41,20 @@ export function decodeSessionToken(token: string | undefined | null): WorkspaceS
   }
 
   try {
-    const parsed = JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as Partial<WorkspaceSession>;
-    if (typeof parsed.workspaceId === 'string' && typeof parsed.deviceId === 'string') {
-      return { workspaceId: parsed.workspaceId, deviceId: parsed.deviceId };
-    }
-    return null;
+    return JSON.parse(Buffer.from(payloadB64, 'base64url').toString('utf8')) as T;
   } catch {
     return null;
   }
+}
+
+export function encodeSessionToken(session: WorkspaceSession): string {
+  return encodeSignedToken('ws', session);
+}
+
+export function decodeSessionToken(token: string | undefined | null): WorkspaceSession | null {
+  const parsed = decodeSignedToken<Partial<WorkspaceSession>>('ws', token);
+  if (parsed && typeof parsed.workspaceId === 'string' && typeof parsed.deviceId === 'string') {
+    return { workspaceId: parsed.workspaceId, deviceId: parsed.deviceId };
+  }
+  return null;
 }

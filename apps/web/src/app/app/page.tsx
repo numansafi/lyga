@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Alert, Button, Loader, Modal, Progress } from '@mantine/core';
 import {
   ArrowDownToLine,
@@ -17,9 +18,10 @@ import {
   Link2,
   List,
   Lock,
-  Paperclip,
+  LogOut,
   Pencil,
   Pin,
+  Plus,
   QrCode,
   Search,
   Send,
@@ -36,7 +38,6 @@ import {
   type DefaultExtensionType,
 } from 'react-file-icon';
 import { LygaQrCode } from '@/components/LygaQrCode';
-import { WaitlistModal } from '@/components/WaitlistModal';
 import {
   FREE_MAX_STORAGE_BYTES,
   type FeedItemKind,
@@ -56,6 +57,7 @@ import {
 } from '@/lib/mvp/crypto';
 import { getSavedDeviceName, saveDeviceName } from '@/lib/mvp/device-label';
 import { getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import styles from './Workspace.module.css';
 
 type TabFilter = 'all' | FeedItemKind;
@@ -186,7 +188,9 @@ function getFileIconProps(ext: string) {
 }
 
 export default function WorkspacePage() {
+  const router = useRouter();
   const [workspace, setWorkspace] = useState<WorkspaceRecord | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const [deviceId, setDeviceId] = useState<string | null>(null);
   const [devices, setDevices] = useState<Array<{ id: string; label: string }>>([]);
   const [myDeviceName, setMyDeviceName] = useState('This device');
@@ -214,7 +218,6 @@ export default function WorkspacePage() {
   const [pairCopied, setPairCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [waitlistOpen, setWaitlistOpen] = useState(false);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewItem, setPreviewItem] = useState<DecryptedFeedItem | null>(null);
@@ -279,6 +282,11 @@ export default function WorkspacePage() {
 
     if (!res.ok) {
       if (res.status === 401) {
+        const err = (await res.json().catch(() => null)) as { code?: string } | null;
+        if (err?.code === 'AUTH_REQUIRED') {
+          router.replace('/login');
+          return;
+        }
         setWorkspace(null);
         setErrorMsg('This device was disconnected from the workspace.');
       } else {
@@ -291,11 +299,13 @@ export default function WorkspacePage() {
       devices: Array<{ id: string; label: string }>;
       items: FeedItemRecord[];
       usedBytes: number;
+      userEmail?: string;
       deviceId: string;
     };
     if (seq !== loadSeqRef.current) return;
 
     setWorkspace(data.workspace);
+    setUserEmail(data.userEmail ?? null);
     setDeviceId(data.deviceId);
     setDevices(data.devices);
     setMyDeviceName(getSavedDeviceName(data.deviceId));
@@ -318,7 +328,7 @@ export default function WorkspacePage() {
     const decrypted = await decryptItems(data.items, imported);
     if (seq !== loadSeqRef.current) return;
     setItems(decrypted);
-  }, [decryptItems]);
+  }, [decryptItems, router]);
 
   useEffect(() => {
     void loadWorkspace();
@@ -505,7 +515,7 @@ export default function WorkspacePage() {
           } | null;
           setErrorMsg(err?.error ?? 'Upload limit reached.');
           if (err?.code === 'FILE_TOO_LARGE' || err?.code === 'STORAGE_FULL') {
-            setWaitlistOpen(true);
+            setErrorMsg(`${err?.error ?? 'Free limit reached.'} Pro (£5/mo — 100 GB) is coming soon.`);
           }
           break;
         }
@@ -1200,6 +1210,24 @@ export default function WorkspacePage() {
         {recoveryCopied ? <Check size={13} /> : <ShieldCheck size={13} />}
         <span>{recoveryCopied ? 'Recovery link copied' : 'Copy backup recovery link'}</span>
       </button>
+
+      <div className={styles.accountRow}>
+        <span className={styles.accountEmail}>{userEmail ?? 'Signed in'}</span>
+        <button
+          type="button"
+          className={styles.signOutBtn}
+          onClick={() => {
+            void (async () => {
+              await getSupabaseBrowser()?.auth.signOut().catch(() => undefined);
+              await fetch('/api/auth/session', { method: 'DELETE' });
+              router.replace('/login');
+            })();
+          }}
+        >
+          <LogOut size={12} aria-hidden="true" />
+          <span>Sign out</span>
+        </button>
+      </div>
     </div>
   );
 
@@ -1213,7 +1241,7 @@ export default function WorkspacePage() {
       <button
         type="button"
         className={styles.upgradeLink}
-        onClick={() => setWaitlistOpen(true)}
+        onClick={() => setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.')}
       >
         Lock in 100 GB &amp; 5 GB files (£5/mo) →
       </button>
@@ -2056,14 +2084,14 @@ export default function WorkspacePage() {
                   disabled={sending}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <Paperclip size={18} />
+                  <Plus size={18} />
                 </button>
 
                 <textarea
                   ref={textareaRef}
                   rows={1}
                   className={styles.composerInput}
-                  placeholder="Message yourself, drop, or paste a screenshot…"
+                  placeholder="Text yourself anything — links, 4K clips, screenshots…"
                   value={draft}
                   onChange={(e) => setDraft(e.currentTarget.value)}
                   onPaste={(e) => {
@@ -2096,7 +2124,7 @@ export default function WorkspacePage() {
                   disabled={sending || !draft.trim()}
                   onClick={() => void handleSendText()}
                 >
-                  <Send size={16} />
+                  <span>Send ↵</span>
                 </button>
     </div>
             ) : (filter === 'file' || filter === 'media') ? (
@@ -2125,7 +2153,11 @@ export default function WorkspacePage() {
           <Link href="/" className={styles.brandLink}>
             Lyga
           </Link>
-          <Button size="xs" variant="light" onClick={() => setWaitlistOpen(true)}>
+          <Button
+            size="xs"
+            variant="light"
+            onClick={() => setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.')}
+          >
             Pro £5/mo
           </Button>
     </div>
@@ -2154,12 +2186,6 @@ export default function WorkspacePage() {
           {renderStorageCard()}
     </div>
       </Modal>
-
-      <WaitlistModal
-        opened={waitlistOpen}
-        onClose={() => setWaitlistOpen(false)}
-        plan="pro_founder"
-      />
 
       <Modal
         opened={Boolean(previewItem)}
