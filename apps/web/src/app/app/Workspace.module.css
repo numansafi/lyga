@@ -578,6 +578,13 @@
   color: rgba(240, 253, 250, 0.72);
 }
 
+.attachMenuWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
 .attachBtn,
 .sendBtn {
   appearance: none;
@@ -605,6 +612,93 @@
 .attachBtn:hover:not(:disabled) {
   background: rgba(94, 234, 212, 0.16);
   color: #5eead4;
+}
+
+.attachBtnOpen {
+  background: #2dd4bf;
+  color: #04221e;
+  transform: rotate(45deg);
+}
+
+.attachBtnOpen:hover:not(:disabled) {
+  background: #5eead4;
+  color: #04221e;
+}
+
+.attachPopover {
+  position: absolute;
+  left: -4px;
+  bottom: calc(100% + 14px);
+  width: 228px;
+  background: rgba(14, 42, 38, 0.96);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 18px;
+  padding: 6px;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: attachPopoverIn 150ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes attachPopoverIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.attachPopoverItem {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 11px;
+  border-radius: 12px;
+  color: #ecfdf5;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.attachPopoverItem:hover,
+.attachPopoverItem:focus-visible {
+  background: #153934;
+  outline: none;
+}
+
+.attachPopoverItem:active {
+  background: #19453f;
+}
+
+.attachPopoverIcon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: rgba(45, 212, 191, 0.14);
+  color: #2dd4bf;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.attachPopoverDivider {
+  height: 1px;
+  background: rgba(94, 234, 212, 0.1);
+  margin: 4px 8px;
 }
 
 .sendBtn {

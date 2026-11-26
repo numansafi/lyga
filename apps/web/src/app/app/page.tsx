@@ -6,14 +6,18 @@ import { useRouter } from 'next/navigation';
 import { Alert, Button, Loader, Modal, Progress } from '@mantine/core';
 import {
   ArrowDownToLine,
+  Camera,
   Check,
   CheckSquare,
   ChevronLeft,
   ChevronRight,
+  ClipboardPaste,
   Code2,
   Copy,
   ExternalLink,
   Eye,
+  FileText,
+  Image as ImageIcon,
   LayoutGrid,
   Link2,
   List,
@@ -232,9 +236,16 @@ export default function WorkspacePage() {
   const [editingItem, setEditingItem] = useState<DecryptedFeedItem | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
+  const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const mediaInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const docsInputRef = useRef<HTMLInputElement>(null);
+  const attachMenuWrapRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
   const decryptedCacheRef = useRef<Map<string, DecryptedFeedItem>>(new Map());
   const previewUrlsRef = useRef<Record<string, string>>({});
   const previewInFlightRef = useRef<Map<string, Promise<string | null>>>(new Map());
@@ -366,6 +377,7 @@ export default function WorkspacePage() {
   useEffect(() => {
     setSelectMode(false);
     setSelectedIds([]);
+    setAttachMenuOpen(false);
   }, [filter]);
 
   useEffect(() => {
@@ -409,16 +421,25 @@ export default function WorkspacePage() {
   }, [draft]);
 
   useEffect(() => {
-    const vv = window.visualViewport;
-    if (!vv) return;
-
     const root = document.documentElement;
+    const prevHtmlBg = root.style.backgroundColor;
+    const prevBodyBg = document.body.style.backgroundColor;
+    root.style.backgroundColor = '#061a18';
+    document.body.style.backgroundColor = '#061a18';
+
+    const vv = window.visualViewport;
+    if (!vv) {
+      return () => {
+        root.style.backgroundColor = prevHtmlBg;
+        document.body.style.backgroundColor = prevBodyBg;
+      };
+    }
+
     let prevHeight = vv.height;
 
     const syncViewport = () => {
       root.style.setProperty('--app-height', `${vv.height}px`);
-      root.style.setProperty('--app-offset-top', `${vv.offsetTop}px`);
-      if (vv.height < prevHeight - 80 && filter === 'all') {
+      if (vv.height < prevHeight - 80 && filterRef.current === 'all') {
         requestAnimationFrame(() => {
           bottomRef.current?.scrollIntoView({ behavior: 'auto' });
         });
@@ -433,9 +454,74 @@ export default function WorkspacePage() {
       vv.removeEventListener('resize', syncViewport);
       vv.removeEventListener('scroll', syncViewport);
       root.style.removeProperty('--app-height');
-      root.style.removeProperty('--app-offset-top');
+      root.style.backgroundColor = prevHtmlBg;
+      document.body.style.backgroundColor = prevBodyBg;
     };
-  }, [filter]);
+  }, []);
+
+  useEffect(() => {
+    if (!attachMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      if (
+        attachMenuWrapRef.current &&
+        !attachMenuWrapRef.current.contains(e.target as Node)
+      ) {
+        setAttachMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAttachMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [attachMenuOpen]);
+
+  const handlePasteFromClipboard = async () => {
+    setAttachMenuOpen(false);
+    setErrorMsg(null);
+    if (!navigator.clipboard) {
+      setErrorMsg('Clipboard access is not available in this browser.');
+      return;
+    }
+
+    try {
+      if (typeof navigator.clipboard.read === 'function') {
+        const clipItems = await navigator.clipboard.read();
+        const files: File[] = [];
+        for (const clipItem of clipItems) {
+          const imageType = clipItem.types.find((t) => t.startsWith('image/'));
+          if (imageType) {
+            const blob = await clipItem.getType(imageType);
+            const ext = imageType.split('/')[1]?.replace(/[^a-z0-9]/gi, '') || 'png';
+            files.push(new File([blob], `pasted-image.${ext}`, { type: imageType }));
+          }
+        }
+        if (files.length > 0) {
+          const dt = new DataTransfer();
+          files.forEach((f) => dt.items.add(f));
+          void handleSendFiles(dt.files);
+          return;
+        }
+      }
+
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        setDraft((prev) => (prev ? `${prev}${prev.endsWith('\n') ? '' : '\n'}${text}` : text));
+        textareaRef.current?.focus();
+        return;
+      }
+
+      setErrorMsg('Nothing in clipboard to paste.');
+    } catch {
+      setErrorMsg('Clipboard permission denied. Tap the text box and paste directly.');
+    }
+  };
 
   const handleSendText = async () => {
     if (!cryptoKey || !draft.trim()) return;
@@ -1291,7 +1377,7 @@ export default function WorkspacePage() {
               </svg>
     </div>
             <div>
-              <div className={styles.chatTitle}>My Feed</div>
+              <div className={styles.chatTitle}>My Lyga</div>
               <div className={styles.chatSub}>
                 <span className={styles.chatSubEncrypted}>
                   <Lock size={11} aria-hidden="true" />
@@ -2074,18 +2160,117 @@ export default function WorkspacePage() {
                 e.currentTarget.value = '';
               }}
             />
+            <input
+              ref={mediaInputRef}
+              type="file"
+              multiple
+              accept="image/*,video/*"
+              className={styles.hiddenInput}
+              onChange={(e) => {
+                void handleSendFiles(e.currentTarget.files);
+                e.currentTarget.value = '';
+              }}
+            />
+            <input
+              ref={cameraInputRef}
+              type="file"
+              accept="image/*,video/*"
+              capture="environment"
+              className={styles.hiddenInput}
+              onChange={(e) => {
+                void handleSendFiles(e.currentTarget.files);
+                e.currentTarget.value = '';
+              }}
+            />
+            <input
+              ref={docsInputRef}
+              type="file"
+              multiple
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md,.csv,.json,.zip,.rar,.7z,.tar,.gz,.mp3,.wav,.m4a,.svg,application/*,text/*,audio/*"
+              className={styles.hiddenInput}
+              onChange={(e) => {
+                void handleSendFiles(e.currentTarget.files);
+                e.currentTarget.value = '';
+              }}
+            />
 
             {filter === 'all' ? (
               <div className={styles.composerBar}>
-                <button
-                  type="button"
-                  className={styles.attachBtn}
-                  aria-label="Attach file"
-                  disabled={sending}
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  <Plus size={18} />
-                </button>
+                <div className={styles.attachMenuWrap} ref={attachMenuWrapRef}>
+                  {attachMenuOpen && (
+                    <div
+                      className={styles.attachPopover}
+                      role="menu"
+                      aria-label="Attach to My Lyga"
+                    >
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={styles.attachPopoverItem}
+                        onClick={() => {
+                          setAttachMenuOpen(false);
+                          mediaInputRef.current?.click();
+                        }}
+                      >
+                        <span className={styles.attachPopoverIcon} aria-hidden="true">
+                          <ImageIcon size={16} />
+                        </span>
+                        <span>Photos &amp; Videos</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={styles.attachPopoverItem}
+                        onClick={() => {
+                          setAttachMenuOpen(false);
+                          cameraInputRef.current?.click();
+                        }}
+                      >
+                        <span className={styles.attachPopoverIcon} aria-hidden="true">
+                          <Camera size={16} />
+                        </span>
+                        <span>Take Photo or Video</span>
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={styles.attachPopoverItem}
+                        onClick={() => {
+                          setAttachMenuOpen(false);
+                          docsInputRef.current?.click();
+                        }}
+                      >
+                        <span className={styles.attachPopoverIcon} aria-hidden="true">
+                          <FileText size={16} />
+                        </span>
+                        <span>Browse Files</span>
+                      </button>
+                      <div className={styles.attachPopoverDivider} role="separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className={styles.attachPopoverItem}
+                        onClick={() => void handlePasteFromClipboard()}
+                      >
+                        <span className={styles.attachPopoverIcon} aria-hidden="true">
+                          <ClipboardPaste size={16} />
+                        </span>
+                        <span>Paste from Clipboard</span>
+                      </button>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    className={`${styles.attachBtn} ${attachMenuOpen ? styles.attachBtnOpen : ''}`}
+                    aria-label={attachMenuOpen ? 'Close attachment menu' : 'Open attachment menu'}
+                    aria-expanded={attachMenuOpen}
+                    aria-haspopup="menu"
+                    disabled={sending}
+                    onClick={() => setAttachMenuOpen((prev) => !prev)}
+                  >
+                    <Plus size={18} />
+                  </button>
+                </div>
 
                 <textarea
                   ref={textareaRef}

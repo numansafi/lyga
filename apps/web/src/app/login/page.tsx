@@ -1,10 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Alert, Button, Loader } from '@mantine/core';
-import { Lock, Mail } from 'lucide-react';
+import { Button, Loader } from '@mantine/core';
+import { Eye, EyeOff, Lock, Mail, RefreshCw, X } from 'lucide-react';
+import { LygaQrCode } from '@/components/LygaQrCode';
+import { detectDeviceName } from '@/lib/mvp/device-label';
+import { saveWorkspaceKey } from '@/lib/mvp/key-store';
+import { createEphemeralQrKey, decryptWmkFromQr } from '@/lib/mvp/qr-crypto';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import styles from './Login.module.css';
 
@@ -18,8 +22,13 @@ export default function LoginPage() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [qrUrl, setQrUrl] = useState('');
+  const [qrExpired, setQrExpired] = useState(false);
+  const [qrChallenge, setQrChallenge] = useState<{ id: string; secret: string } | null>(null);
+  const qrKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
@@ -42,6 +51,82 @@ export default function LoginPage() {
       active = false;
     };
   }, [router]);
+
+  const startQrSession = useCallback(async () => {
+    try {
+      setQrExpired(false);
+      const qrKey = createEphemeralQrKey();
+      const res = await fetch('/api/mvp/qr-login', { method: 'POST' });
+      if (!res.ok) return;
+      const data = (await res.json()) as { id: string; secret: string };
+      qrKeyRef.current = qrKey;
+      setQrChallenge({ id: data.id, secret: data.secret });
+      setQrUrl(
+        `${window.location.origin}/qr-approve?id=${encodeURIComponent(data.id)}#k=${encodeURIComponent(qrKey)}`
+      );
+    } catch {
+      // ignore transient init error
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!checking) {
+      void startQrSession();
+    }
+  }, [checking, startQrSession]);
+
+  useEffect(() => {
+    if (!qrChallenge || qrExpired) return;
+    let active = true;
+    let inFlight = false;
+    const timer = window.setInterval(async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try {
+        const label = encodeURIComponent(detectDeviceName());
+        const res = await fetch(
+          `/api/mvp/qr-login?id=${encodeURIComponent(qrChallenge.id)}&secret=${encodeURIComponent(qrChallenge.secret)}&label=${label}`,
+          { cache: 'no-store' }
+        );
+        const data = (await res.json().catch(() => null)) as
+          | { status: 'pending' | 'expired' }
+          | { status: 'approved'; workspaceId: string; encryptedWmk: string }
+          | { status: 'error'; error?: string }
+          | null;
+
+        if (!active || !data) return;
+
+        if (data.status === 'expired') {
+          window.clearInterval(timer);
+          setQrExpired(true);
+        } else if (data.status === 'error') {
+          window.clearInterval(timer);
+          setErrorMsg(data.error ?? 'Could not pair device.');
+          setQrExpired(true);
+        } else if (data.status === 'approved' && qrKeyRef.current) {
+          window.clearInterval(timer);
+          try {
+            const wmk = await decryptWmkFromQr(data.encryptedWmk, qrKeyRef.current);
+            await saveWorkspaceKey(data.workspaceId, wmk);
+            router.replace('/app');
+          } catch {
+            if (!active) return;
+            setErrorMsg('Unable to decrypt workspace key from QR code. Refresh and try again.');
+            setQrExpired(true);
+          }
+        }
+      } catch {
+        // ignore transient network poll errors
+      } finally {
+        inFlight = false;
+      }
+    }, 2000);
+
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [qrChallenge, qrExpired, router]);
 
   const exchangeSession = async (accessToken: string) => {
     const res = await fetch('/api/auth/session', {
@@ -194,32 +279,47 @@ export default function LoginPage() {
 
   return (
     <main className={styles.page}>
-      <div className={styles.card}>
-        <Link href="/" className={styles.brand}>
-          <svg width="24" height="24" viewBox="48 48 160 178" fill="none" aria-hidden="true">
-            <path
-              stroke="#2DD4BF"
-              strokeWidth="28"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M64 94L92 66v116h100l-28 28"
-            />
-          </svg>
-          <span>LYGA</span>
-        </Link>
+      <div className={styles.shell}>
+        <div className={styles.card}>
+          <div className={styles.topRow}>
+            <Link href="/" className={styles.brand}>
+              <svg width="24" height="24" viewBox="48 48 160 178" fill="none" aria-hidden="true">
+                <path
+                  stroke="#5EEAD4"
+                  strokeWidth="28"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M64 94L92 66v116h100l-28 28"
+                />
+              </svg>
+              <span>LYGA</span>
+            </Link>
+            <span className={styles.e2eeBadge}>
+              <Lock size={11} aria-hidden="true" />
+              Encrypted
+            </span>
+          </div>
 
-        <h1 className={styles.title}>Sign in to your feed</h1>
-        <p className={styles.subtitle}>
-          <Lock size={12} aria-hidden="true" />
-          End-to-end encrypted across your phone and computer
-        </p>
+          <h1 className={styles.title}>Sign in or sign up</h1>
 
-        {errorMsg && (
-          <Alert color="red" withCloseButton onClose={() => setErrorMsg(null)}>
-            {errorMsg}
-          </Alert>
-        )}
-        {infoMsg && <Alert color="spruce">{infoMsg}</Alert>}
+          {errorMsg && (
+            <div className={styles.errorBanner} role="alert">
+              <span>{errorMsg}</span>
+              <button
+                type="button"
+                className={styles.bannerClose}
+                aria-label="Dismiss error"
+                onClick={() => setErrorMsg(null)}
+              >
+                <X size={15} />
+              </button>
+            </div>
+          )}
+          {infoMsg && (
+            <div className={styles.infoBanner} role="status">
+              <span>{infoMsg}</span>
+            </div>
+          )}
 
         {supabase ? (
           <>
@@ -253,7 +353,7 @@ export default function LoginPage() {
                   setErrorMsg(null);
                 }}
               >
-                Email code / link
+                Email code
               </button>
               <button
                 type="button"
@@ -285,8 +385,13 @@ export default function LoginPage() {
                       required
                     />
                   </label>
-                  <Button type="submit" fullWidth loading={loading} color="spruce">
-                    Verify &amp; continue
+                  <Button
+                    type="submit"
+                    fullWidth
+                    loading={loading}
+                    className={styles.primaryBtn}
+                  >
+                    Verify &amp; continue →
                   </Button>
                   <button
                     type="button"
@@ -318,10 +423,10 @@ export default function LoginPage() {
                     type="submit"
                     fullWidth
                     loading={loading}
-                    color="spruce"
+                    className={styles.primaryBtn}
                     leftSection={<Mail size={15} />}
                   >
-                    Send sign-in code
+                    Send sign-in code →
                   </Button>
                 </form>
               )
@@ -341,19 +446,34 @@ export default function LoginPage() {
                 </label>
                 <label className={styles.label}>
                   Password
-                  <input
-                    type="password"
-                    autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                    className={styles.input}
-                    placeholder="••••••••"
-                    minLength={6}
-                    value={password}
-                    onChange={(e) => setPassword(e.currentTarget.value)}
-                    required
-                  />
+                  <div className={styles.passwordWrap}>
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                      className={`${styles.input} ${styles.passwordInput}`}
+                      placeholder="••••••••"
+                      minLength={6}
+                      value={password}
+                      onChange={(e) => setPassword(e.currentTarget.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className={styles.eyeBtn}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((v) => !v)}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
                 </label>
-                <Button type="submit" fullWidth loading={loading} color="spruce">
-                  {isSignUp ? 'Create account' : 'Log in'}
+                <Button
+                  type="submit"
+                  fullWidth
+                  loading={loading}
+                  className={styles.primaryBtn}
+                >
+                  {isSignUp ? 'Create account →' : 'Log in →'}
                 </Button>
                 <button
                   type="button"
@@ -378,11 +498,52 @@ export default function LoginPage() {
                 required
               />
             </label>
-            <Button type="submit" fullWidth loading={loading} color="spruce">
+            <Button
+              type="submit"
+              fullWidth
+              loading={loading}
+              className={styles.primaryBtn}
+            >
               Continue in local dev →
             </Button>
           </form>
         )}
+        </div>
+
+        <aside className={styles.qrPanel} aria-label="Unlock with your phone">
+          <div className={styles.qrStage}>
+            <span className={`${styles.cornerBracket} ${styles.cornerTL}`} aria-hidden="true" />
+            <span className={`${styles.cornerBracket} ${styles.cornerTR}`} aria-hidden="true" />
+            <span className={`${styles.cornerBracket} ${styles.cornerBL}`} aria-hidden="true" />
+            <span className={`${styles.cornerBracket} ${styles.cornerBR}`} aria-hidden="true" />
+
+            <div className={styles.qrFrame}>
+              {qrUrl && !qrExpired ? (
+                <LygaQrCode value={qrUrl} size={184} />
+              ) : (
+                <div className={styles.qrPlaceholder}>
+                  {qrExpired ? (
+                    <button
+                      type="button"
+                      className={styles.qrRefreshBtn}
+                      onClick={() => void startQrSession()}
+                    >
+                      <RefreshCw size={16} />
+                      <span>Refresh QR</span>
+                    </button>
+                  ) : (
+                    <Loader color="spruce" size="sm" />
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <h2 className={styles.qrTitle}>Scan with your phone</h2>
+          <p className={styles.qrCopy}>
+            Signed in on your phone? Scan to unlock this browser.
+          </p>
+        </aside>
       </div>
     </main>
   );
