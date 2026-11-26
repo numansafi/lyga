@@ -16,6 +16,7 @@ import {
   Copy,
   ExternalLink,
   Eye,
+  FileArchive,
   FileText,
   Image as ImageIcon,
   LayoutGrid,
@@ -36,11 +37,6 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import {
-  FileIcon as ReactFileIcon,
-  defaultStyles,
-  type DefaultExtensionType,
-} from 'react-file-icon';
 import { LygaQrCode } from '@/components/LygaQrCode';
 import {
   FREE_EXPIRY_DAYS,
@@ -173,23 +169,31 @@ function getLinkPreviewInfo(rawUrl: string): {
   }
 }
 
-function getFileIconProps(ext: string) {
-  const preset = defaultStyles[ext as DefaultExtensionType];
-  if (!preset) {
-    return {
-      extension: ext,
-      color: '#f0fdfa',
-      foldColor: '#99f6e4',
-      labelColor: '#115e59',
-      glyphColor: '#115e59',
-    };
-  }
-  return {
-    extension: ext,
-    ...preset,
-    foldColor: '#cbd5e1',
-    glyphColor: preset.labelColor ?? '#115e59',
-  };
+const ARCHIVE_EXTS = new Set(['zip', 'rar', '7z', 'tar', 'gz']);
+const PDF_EXTS = new Set(['pdf']);
+
+function DarkFileBadge({ ext }: { ext: string }) {
+  const norm = ext.toLowerCase();
+  const tone = PDF_EXTS.has(norm)
+    ? 'pdf'
+    : ARCHIVE_EXTS.has(norm)
+      ? 'zip'
+      : IMAGE_EXTS.has(norm)
+        ? 'media'
+        : 'doc';
+
+  const Icon = IMAGE_EXTS.has(norm)
+    ? ImageIcon
+    : ARCHIVE_EXTS.has(norm)
+      ? FileArchive
+      : FileText;
+
+  return (
+    <div className={styles.darkFileBadge} data-tone={tone}>
+      <Icon size={16} strokeWidth={2} aria-hidden="true" />
+      <span className={styles.darkFileExt}>{(norm || 'file').slice(0, 4)}</span>
+    </div>
+  );
 }
 
 export default function WorkspacePage() {
@@ -239,11 +243,14 @@ export default function WorkspacePage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
   const [showQr, setShowQr] = useState(false);
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const docsInputRef = useRef<HTMLInputElement>(null);
   const attachMenuWrapRef = useRef<HTMLDivElement>(null);
+  const accountMenuDesktopRef = useRef<HTMLDivElement>(null);
+  const accountMenuMobileRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef(filter);
@@ -290,57 +297,62 @@ export default function WorkspacePage() {
 
   const loadWorkspace = useCallback(async () => {
     const seq = ++loadSeqRef.current;
-    const res = await fetch('/api/mvp/workspace', { cache: 'no-store' });
-    if (seq !== loadSeqRef.current) return;
+    try {
+      const res = await fetch('/api/mvp/workspace', { cache: 'no-store' });
+      if (seq !== loadSeqRef.current) return;
 
-    if (!res.ok) {
-      if (res.status === 401) {
-        const err = (await res.json().catch(() => null)) as { code?: string } | null;
-        if (err?.code === 'AUTH_REQUIRED') {
-          router.replace('/login');
-          return;
+      if (!res.ok) {
+        if (res.status === 401) {
+          const err = (await res.json().catch(() => null)) as { code?: string } | null;
+          if (err?.code === 'AUTH_REQUIRED') {
+            router.replace('/login');
+            return;
+          }
+          setWorkspace(null);
+          setErrorMsg('This device was disconnected from the workspace.');
+        } else {
+          setErrorMsg('Unable to load workspace.');
         }
-        setWorkspace(null);
-        setErrorMsg('This device was disconnected from the workspace.');
-      } else {
-        setErrorMsg('Unable to load workspace.');
+        return;
       }
-      return;
+      const data = (await res.json()) as {
+        workspace: WorkspaceRecord;
+        devices: Array<{ id: string; label: string }>;
+        items: FeedItemRecord[];
+        usedBytes: number;
+        userEmail?: string;
+        deviceId: string;
+      };
+      if (seq !== loadSeqRef.current) return;
+
+      setWorkspace(data.workspace);
+      setUserEmail(data.userEmail ?? null);
+      setDeviceId(data.deviceId);
+      setDevices(data.devices);
+      setMyDeviceName(getSavedDeviceName(data.deviceId));
+      setDeviceCount(data.devices.length);
+      setUsedBytes(data.usedBytes);
+
+      let wmk = await getWorkspaceKey(data.workspace.id);
+      if (!wmk) {
+        wmk = generateWorkspaceKey();
+        await saveWorkspaceKey(data.workspace.id, wmk);
+      }
+
+      const imported = await importWorkspaceKey(wmk);
+      if (seq !== loadSeqRef.current) return;
+      setCryptoKey(imported);
+
+      const url = `${window.location.origin}/pair?code=${encodeURIComponent(data.workspace.pair_code)}#wmk=${wmk}`;
+      setPairUrl(url);
+
+      const decrypted = await decryptItems(data.items, imported);
+      if (seq !== loadSeqRef.current) return;
+      setItems(decrypted);
+    } catch {
+      if (seq !== loadSeqRef.current) return;
+      setErrorMsg('Unable to load workspace. Refresh to try again.');
     }
-    const data = (await res.json()) as {
-      workspace: WorkspaceRecord;
-      devices: Array<{ id: string; label: string }>;
-      items: FeedItemRecord[];
-      usedBytes: number;
-      userEmail?: string;
-      deviceId: string;
-    };
-    if (seq !== loadSeqRef.current) return;
-
-    setWorkspace(data.workspace);
-    setUserEmail(data.userEmail ?? null);
-    setDeviceId(data.deviceId);
-    setDevices(data.devices);
-    setMyDeviceName(getSavedDeviceName(data.deviceId));
-    setDeviceCount(data.devices.length);
-    setUsedBytes(data.usedBytes);
-
-    let wmk = await getWorkspaceKey(data.workspace.id);
-    if (!wmk) {
-      wmk = generateWorkspaceKey();
-      await saveWorkspaceKey(data.workspace.id, wmk);
-    }
-
-    const imported = await importWorkspaceKey(wmk);
-    if (seq !== loadSeqRef.current) return;
-    setCryptoKey(imported);
-
-    const url = `${window.location.origin}/pair?code=${encodeURIComponent(data.workspace.pair_code)}#wmk=${wmk}`;
-    setPairUrl(url);
-
-    const decrypted = await decryptItems(data.items, imported);
-    if (seq !== loadSeqRef.current) return;
-    setItems(decrypted);
   }, [decryptItems, router]);
 
   useEffect(() => {
@@ -483,6 +495,29 @@ export default function WorkspacePage() {
       document.removeEventListener('keydown', handleKeyDown);
     };
   }, [attachMenuOpen]);
+
+  useEffect(() => {
+    if (!accountMenuOpen) return;
+    const handlePointerDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      const inDesktop = accountMenuDesktopRef.current?.contains(target);
+      const inMobile = accountMenuMobileRef.current?.contains(target);
+      if (!inDesktop && !inMobile) {
+        setAccountMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setAccountMenuOpen(false);
+      }
+    };
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [accountMenuOpen]);
 
   const handlePasteFromClipboard = async () => {
     setAttachMenuOpen(false);
@@ -1214,20 +1249,142 @@ export default function WorkspacePage() {
     </div>
   );
 
+  const pinnedItems = useMemo(
+    () => items.filter((item) => pinnedIds.includes(item.raw.id)),
+    [items, pinnedIds]
+  );
+
+  const accountInitial = (userEmail?.trim()?.[0] || 'L').toUpperCase();
+
+  const renderAccountMenu = (menuRef: React.RefObject<HTMLDivElement | null>) => (
+    <div className={styles.accountMenuWrap} ref={menuRef}>
+      <button
+        type="button"
+        className={styles.avatarSquircle}
+        aria-label="Account menu"
+        aria-expanded={accountMenuOpen}
+        aria-haspopup="menu"
+        onClick={() => setAccountMenuOpen((prev) => !prev)}
+      >
+        <span>{accountInitial}</span>
+      </button>
+
+      {accountMenuOpen && (
+        <div className={styles.accountPopover} role="menu" aria-label="Account">
+          <div className={styles.accountPopHeader}>
+            <span className={styles.accountPopEmail}>{userEmail ?? 'Signed in'}</span>
+            <span className={styles.accountPlanPill}>Free plan</span>
+          </div>
+          <div className={styles.railHairline} />
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            disabled={!pairUrl}
+            onClick={() => {
+              void navigator.clipboard.writeText(pairUrl);
+              setRecoveryCopied(true);
+              window.setTimeout(() => setRecoveryCopied(false), 1600);
+            }}
+          >
+            {recoveryCopied ? <Check size={13} /> : <ShieldCheck size={13} />}
+            <span>{recoveryCopied ? 'Recovery link copied' : 'Copy backup recovery link'}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.accountPopBtn} ${styles.accountPopDanger}`}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              void (async () => {
+                await getSupabaseBrowser()?.auth.signOut().catch(() => undefined);
+                await fetch('/api/auth/session', { method: 'DELETE' });
+                router.replace('/login');
+              })();
+            }}
+          >
+            <LogOut size={13} aria-hidden="true" />
+            <span>Sign out</span>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+
+  const renderPinnedSection = () => (
+    <div className={`${styles.railSection} ${styles.pinnedSection}`}>
+      <div className={styles.sectionHeaderRow}>
+        <span className={styles.sectionTitle}>Pinned</span>
+        <span className={styles.sectionMuted}>
+          {pinnedItems.length} {pinnedItems.length === 1 ? 'item' : 'items'}
+        </span>
+      </div>
+      {pinnedItems.length === 0 ? (
+        <p className={styles.pinnedEmpty}>
+          Pin any message, link, or file to keep it here.
+        </p>
+      ) : (
+        <div className={styles.pinnedList}>
+          {pinnedItems.map((item) => {
+            const label =
+              item.meta.fileName ||
+              item.meta.title ||
+              item.bodyText?.slice(0, 48) ||
+              'Encrypted item';
+            const actionLabel =
+              item.raw.kind === 'link'
+                ? 'Open'
+                : item.raw.kind === 'file' || item.raw.kind === 'media'
+                  ? 'View'
+                  : 'Copy';
+            return (
+              <button
+                key={item.raw.id}
+                type="button"
+                className={styles.pinnedRow}
+                onClick={() => {
+                  if (item.raw.kind === 'link') {
+                    const href = item.bodyText ? getLinkPreviewInfo(item.bodyText)?.safeHref : null;
+                    if (href) {
+                      window.open(href, '_blank', 'noopener,noreferrer');
+                    } else {
+                      void handlePreview(item);
+                    }
+                  } else if (item.raw.kind === 'file' || item.raw.kind === 'media') {
+                    void handlePreview(item);
+                  } else if (item.bodyText) {
+                    void navigator.clipboard.writeText(item.bodyText);
+                    setCopiedId(item.raw.id);
+                    window.setTimeout(() => setCopiedId(null), 1400);
+                  }
+                }}
+              >
+                <span className={styles.pinnedRowLabel}>{label}</span>
+                <span className={styles.pinnedRowAction}>
+                  {copiedId === item.raw.id ? 'Copied' : actionLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+
   const renderDeviceCard = () => (
-    <div className={styles.deviceCard}>
+    <div className={styles.railSection}>
       <div className={styles.deviceRow}>
-        <span className={styles.deviceHeading}>This device</span>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          {devices.length >= 2 && (
-            <button
-              type="button"
-              className={styles.qrToggleBtn}
-              onClick={() => setShowQr((prev) => !prev)}
-            >
-              {showQr ? 'Hide QR' : 'Show QR'}
-            </button>
-          )}
+        <span className={styles.sectionTitle}>
+          Devices ({devices.length} of {workspace?.max_devices ?? 2})
+        </span>
+        <div className={styles.deviceActions}>
+          <button
+            type="button"
+            className={styles.qrToggleBtn}
+            onClick={() => setShowQr((prev) => !prev)}
+          >
+            {showQr ? 'Hide QR' : 'Show QR'}
+          </button>
           {!editingName && deviceId && (
             <button
               type="button"
@@ -1243,7 +1400,8 @@ export default function WorkspacePage() {
           )}
         </div>
     </div>
-      {editingName && deviceId ? (
+      {showQr && renderQrCard()}
+      {editingName && deviceId && (
         <form
           className={styles.deviceEditRow}
           onSubmit={(e) => {
@@ -1269,8 +1427,6 @@ export default function WorkspacePage() {
             <Check size={14} />
           </button>
         </form>
-      ) : (
-        <div className={styles.deviceName}>{myDeviceName}</div>
       )}
 
       {devices.length > 0 && (
@@ -1307,43 +1463,11 @@ export default function WorkspacePage() {
           })}
     </div>
       )}
-
-      <button
-        type="button"
-        className={styles.recoveryBtn}
-        disabled={!pairUrl}
-        onClick={() => {
-          void navigator.clipboard.writeText(pairUrl);
-          setRecoveryCopied(true);
-          window.setTimeout(() => setRecoveryCopied(false), 1600);
-        }}
-      >
-        {recoveryCopied ? <Check size={13} /> : <ShieldCheck size={13} />}
-        <span>{recoveryCopied ? 'Recovery link copied' : 'Copy backup recovery link'}</span>
-      </button>
-
-      <div className={styles.accountRow}>
-        <span className={styles.accountEmail}>{userEmail ?? 'Signed in'}</span>
-        <button
-          type="button"
-          className={styles.signOutBtn}
-          onClick={() => {
-            void (async () => {
-              await getSupabaseBrowser()?.auth.signOut().catch(() => undefined);
-              await fetch('/api/auth/session', { method: 'DELETE' });
-              router.replace('/login');
-            })();
-          }}
-        >
-          <LogOut size={12} aria-hidden="true" />
-          <span>Sign out</span>
-        </button>
-      </div>
     </div>
   );
 
   const renderStorageCard = () => (
-    <div className={styles.storageCard}>
+    <div className={styles.railSection}>
       <div className={styles.storageRow}>
         <span>Encrypted Vault</span>
         <span>{formatBytes(usedBytes)} / {formatBytes(FREE_MAX_STORAGE_BYTES)}</span>
@@ -1423,6 +1547,14 @@ export default function WorkspacePage() {
       </button>
     </div>
   );
+
+  if (!workspace && !errorMsg) {
+    return (
+      <main className={styles.initialLoadingShell} aria-label="Loading workspace">
+        <Loader color="spruce" size="md" />
+      </main>
+    );
+  }
 
   return (
     <div className={styles.appShell}>
@@ -1513,10 +1645,16 @@ export default function WorkspacePage() {
               variant="light"
               className={styles.mobilePairBtn}
               leftSection={<QrCode size={14} />}
-              onClick={() => setQrModalOpen(true)}
+              onClick={() => {
+                setShowQr(true);
+                setQrModalOpen(true);
+              }}
             >
               Pair
             </Button>
+            <div className={styles.mobileAccountWrap}>
+              {renderAccountMenu(accountMenuMobileRef)}
+            </div>
     </div>
         </header>
 
@@ -1694,7 +1832,7 @@ export default function WorkspacePage() {
                                   />
                                 ) : (
                                   <div className={styles.mediaTileFallback}>
-                                    <ReactFileIcon {...getFileIconProps(ext)} />
+                                    <DarkFileBadge ext={ext} />
     </div>
                                 )}
                               </button>
@@ -1789,7 +1927,7 @@ export default function WorkspacePage() {
                                   </button>
                                 ) : (
                                   <div className={styles.fileIconWrap} aria-hidden="true">
-                                    <ReactFileIcon {...getFileIconProps(ext)} />
+                                    <DarkFileBadge ext={ext} />
     </div>
                                 )
                               ) : linkInfo?.youtubeThumbUrl ? (
@@ -2149,7 +2287,7 @@ export default function WorkspacePage() {
                             return (
                               <div className={styles.attachmentCard}>
                                 <div className={styles.fileIconWrap} aria-hidden="true">
-                                  <ReactFileIcon {...getFileIconProps(ext)} />
+                                  <DarkFileBadge ext={ext} />
     </div>
                                 <div className={styles.attachmentMeta}>
                                   <div className={styles.attachmentName}>
@@ -2424,8 +2562,14 @@ export default function WorkspacePage() {
       </section>
 
       <aside className={styles.rail} aria-label="Workspace devices and pairing">
-        {(devices.length < 2 || showQr) && renderQrCard()}
+        <div className={styles.railHeaderBar}>
+          <span className={styles.railHeaderTitle}>Workspace</span>
+          {renderAccountMenu(accountMenuDesktopRef)}
+        </div>
         {renderStorageCard()}
+        <div className={styles.railHairline} />
+        {renderPinnedSection()}
+        <div className={styles.railHairline} />
         {renderDeviceCard()}
       </aside>
 
@@ -2443,8 +2587,10 @@ export default function WorkspacePage() {
         }}
       >
         <div className={styles.mobileModalStack}>
-          {(devices.length < 2 || showQr) && renderQrCard()}
           {renderStorageCard()}
+          <div className={styles.railHairline} />
+          {renderPinnedSection()}
+          <div className={styles.railHairline} />
           {renderDeviceCard()}
     </div>
       </Modal>
