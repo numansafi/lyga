@@ -578,6 +578,10 @@
   color: rgba(240, 253, 250, 0.72);
 }
 
+.composerInput:focus::placeholder {
+  color: transparent;
+}
+
 .attachMenuWrap {
   position: relative;
   display: inline-flex;
@@ -764,10 +768,10 @@
   overflow-y: auto;
   background: #0b2623;
   border-left: 1px solid #153b37;
-  padding: 16px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 10px;
 }
 
 .railTop {
@@ -798,26 +802,26 @@
 }
 
 .qrCard {
-  background: #0e2c29;
+  flex-shrink: 0;
+  background:
+    radial-gradient(ellipse 80% 80% at 22% 50%, rgba(45, 212, 191, 0.14), transparent 72%),
+    #0e2c29;
   border: 1.5px solid #1c4742;
-  border-radius: 20px;
+  border-radius: 16px;
+  padding: 12px;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
+  gap: 12px;
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.34);
 }
 
 .qrHero {
-  width: 100%;
-  padding: 16px 18px 20px;
-  background:
-    radial-gradient(ellipse 90% 55% at 50% 100%, rgba(45, 212, 191, 0.16), transparent 72%),
-    #08201d;
+  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: 12px;
+  justify-content: center;
 }
 
 .qrStatusPill {
@@ -854,7 +858,7 @@
 
 .qrStage {
   position: relative;
-  padding: 10px;
+  padding: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -904,8 +908,8 @@
 
 .qrBox {
   position: relative;
-  padding: 10px;
-  border-radius: 14px;
+  padding: 7px;
+  border-radius: 12px;
   background: #ffffff;
   box-shadow: 0 10px 24px rgba(0, 0, 0, 0.36);
   overflow: hidden;
@@ -914,43 +918,52 @@
 }
 
 .qrBody {
-  width: 100%;
-  padding: 16px 18px 18px;
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 10px;
+  align-items: flex-start;
+  text-align: left;
+  gap: 6px;
 }
 
 .qrTitle {
-  font-size: 15.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: #f0fdfa;
 }
 
 .qrDesc {
   margin: 0;
-  font-size: 12.5px;
-  line-height: 1.5;
+  font-size: 11.5px;
+  line-height: 1.35;
   color: rgba(204, 251, 241, 0.72);
 }
 
-.pairCodePill {
-  width: 100%;
+.qrCopyLinkBtn {
+  appearance: none;
+  border: 1px solid rgba(94, 234, 212, 0.2);
+  background: rgba(45, 212, 191, 0.06);
+  color: #5eead4;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 7px 12px;
-  border-radius: 10px;
-  background: #071e1b;
-  border: 1px solid #1c4742;
-  font-family: var(--font-mono), monospace;
-  font-size: 12.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: #f0fdfa;
+  gap: 5px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.qrCopyLinkBtn:hover:not(:disabled) {
+  background: rgba(45, 212, 191, 0.18);
+}
+
+.qrCopyLinkBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .pairCodeLabel {
@@ -977,6 +990,7 @@
 }
 
 .deviceCard {
+  flex-shrink: 0;
   background: #102c29;
   border: 1px solid #1c4742;
   border-radius: 14px;
@@ -1086,40 +1100,144 @@
 
 .removeDevBtn {
   appearance: none;
-  border: 0;
-  background: transparent;
-  width: 24px;
-  height: 24px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+  padding: 4px 10px;
   border-radius: 999px;
-  display: grid;
-  place-items: center;
-  color: rgba(204, 251, 241, 0.65);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(204, 251, 241, 0.72);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
   cursor: pointer;
   flex-shrink: 0;
+  transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
 }
 
 .removeDevBtn:hover {
-  background: rgba(220, 38, 38, 0.2);
+  background: rgba(248, 113, 113, 0.14);
+  border-color: rgba(248, 113, 113, 0.35);
   color: #fca5a5;
 }
 
+.qrToggleBtn {
+  appearance: none;
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  background: rgba(45, 212, 191, 0.12);
+  color: #5eead4;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background-color 140ms ease;
+}
+
+.qrToggleBtn:hover {
+  background: rgba(45, 212, 191, 0.22);
+}
+
 .storageCard {
+  flex-shrink: 0;
   background: #102c29;
   border: 1px solid #1c4742;
   border-radius: 14px;
-  padding: 12px 14px;
+  padding: 13px 14px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .storageRow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 12.5px;
+  font-weight: 650;
   color: #f0fdfa;
+}
+
+.vaultBarTrack {
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  display: flex;
+  gap: 2px;
+}
+
+.vaultSeg {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 220ms ease;
+}
+
+.vaultList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vaultItemBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.vaultItemBtn:hover .vaultItemLeft {
+  color: #f0fdfa;
+}
+
+.vaultItemLeft {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #9bbdb5;
+  transition: color 120ms ease;
+}
+
+.vaultSwatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.vaultItemValue {
+  color: #ecfdf5;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.vaultDivider {
+  height: 1px;
+  background: rgba(94, 234, 212, 0.1);
+}
+
+.vaultMetaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #9bbdb5;
+}
+
+.vaultMetaRow span:last-child {
+  color: #ecfdf5;
+  font-weight: 500;
 }
 
 .upgradeLink {

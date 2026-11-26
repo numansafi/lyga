@@ -248,8 +248,14 @@ export default function LoginPage() {
         }
         if (data.session?.access_token) {
           await exchangeSession(data.session.access_token);
+        } else if (data.user?.identities && data.user.identities.length === 0) {
+          setIsSignUp(false);
+          setPassword('');
+          setErrorMsg('An account with this email already exists. Log in or use Email code.');
         } else {
-          setInfoMsg('Account created! Check your email to confirm and sign in.');
+          setIsSignUp(false);
+          setPassword('');
+          setInfoMsg('Account created! Check your email to confirm, then log in.');
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
