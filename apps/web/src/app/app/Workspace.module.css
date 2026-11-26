@@ -1,3 +1,11 @@
+.initialLoadingShell {
+  min-height: 100dvh;
+  width: 100%;
+  background: #061a18;
+  display: grid;
+  place-items: center;
+}
+
 .appShell {
   height: var(--app-height, 100dvh);
   display: grid;
@@ -763,15 +771,282 @@
   font-weight: 700;
 }
 
+.darkFileBadge {
+  width: 38px;
+  height: 44px;
+  border-radius: 8px;
+  background: #08201d;
+  border: 1.5px solid rgba(94, 234, 212, 0.36);
+  color: #99f6e4;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 4px 5px;
+  flex-shrink: 0;
+}
+
+.darkFileBadge[data-tone='pdf'] {
+  border-color: rgba(248, 113, 113, 0.45);
+  color: #fca5a5;
+}
+
+.darkFileBadge[data-tone='zip'] {
+  border-color: rgba(251, 191, 36, 0.45);
+  color: #fcd34d;
+}
+
+.darkFileBadge[data-tone='doc'] {
+  border-color: rgba(125, 211, 252, 0.4);
+  color: #7dd3fc;
+}
+
+.darkFileExt {
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
 .rail {
   height: 100dvh;
   overflow-y: auto;
-  background: #0b2623;
+  background: #071e1b;
   border-left: 1px solid #153b37;
-  padding: 12px;
+  padding: 0;
   display: flex;
   flex-direction: column;
+  gap: 0;
+}
+
+.railHeaderBar {
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(94, 234, 212, 0.09);
+  flex-shrink: 0;
+}
+
+.railHeaderTitle {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #84a9a1;
+}
+
+.railSection {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  flex-shrink: 0;
+}
+
+.railHairline {
+  height: 1px;
+  background: rgba(94, 234, 212, 0.09);
+  flex-shrink: 0;
+}
+
+.sectionHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sectionTitle {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #f0fdfa;
+}
+
+.sectionMuted {
+  font-size: 11.5px;
+  color: #84a9a1;
+}
+
+.pinnedSection {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.pinnedEmpty {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #84a9a1;
+}
+
+.pinnedList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pinnedRow {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.025);
+  border-radius: 10px;
+  padding: 8px 10px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
+  font-family: inherit;
+  font-size: 12px;
+  color: #ecfdf5;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+
+.pinnedRow:hover {
+  background: rgba(45, 212, 191, 0.09);
+}
+
+.pinnedRowLabel {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pinnedRowAction {
+  font-size: 11px;
+  font-weight: 600;
+  color: #2dd4bf;
+  flex-shrink: 0;
+}
+
+.deviceActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.accountMenuWrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.avatarSquircle {
+  appearance: none;
+  position: relative;
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #134e46, #0b2f2a);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  color: #ecfdf5;
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 750;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.avatarSquircle:hover {
+  border-color: rgba(94, 234, 212, 0.55);
+}
+
+.accountPopover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 264px;
+  background: rgba(17, 50, 46, 0.98);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border: 1px solid rgba(94, 234, 212, 0.36);
+  border-radius: 16px;
+  padding: 13px;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.72), 0 0 0 1px rgba(0, 0, 0, 0.35);
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.accountPopHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.accountPopEmail {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #f0fdfa;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.accountPlanPill {
+  font-size: 10.5px;
+  font-weight: 650;
+  color: #5eead4;
+  background: rgba(45, 212, 191, 0.14);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  padding: 2px 8px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.accountPopBtn {
+  appearance: none;
+  border: 0;
+  background: rgba(255, 255, 255, 0.04);
+  color: #ecfdf5;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 8px 10px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.accountPopBtn:hover:not(:disabled) {
+  background: rgba(45, 212, 191, 0.1);
+}
+
+.accountPopBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.accountPopDanger {
+  color: #fca5a5;
+}
+
+.accountPopDanger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.14);
+}
+
+.mobileAccountWrap {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .mobileAccountWrap {
+    display: inline-flex;
+    align-items: center;
+  }
 }
 
 .railTop {
