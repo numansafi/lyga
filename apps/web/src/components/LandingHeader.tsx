@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { Button } from '@mantine/core';
 import styles from './LandingHeader.module.css';
 
@@ -8,19 +9,44 @@ interface LandingHeaderProps {
 }
 
 export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
+  const [scrolled, setScrolled] = useState(false);
+  const [activeSection, setActiveSection] = useState<'pricing' | 'faq' | null>(null);
+
+  useEffect(() => {
+    const onScroll = () => {
+      setScrolled(window.scrollY > 12);
+
+      const faqEl = document.getElementById('faq');
+      const pricingEl = document.getElementById('pricing');
+      const offset = 140;
+
+      if (faqEl && faqEl.getBoundingClientRect().top <= offset) {
+        setActiveSection('faq');
+      } else if (pricingEl && pricingEl.getBoundingClientRect().top <= offset) {
+        setActiveSection('pricing');
+      } else {
+        setActiveSection(null);
+      }
+    };
+
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   return (
-    <header className={styles.header}>
-      <div className={styles.inner}>
-        <a href="#" className={styles.brand}>
+    <div className={styles.headerWrap}>
+      <header className={`${styles.header} ${scrolled ? styles.headerScrolled : ''}`}>
+        <a href="#" className={styles.brand} onClick={() => setActiveSection(null)}>
           <svg
-            width="30"
-            height="30"
+            width="26"
+            height="26"
             viewBox="48 48 160 178"
             fill="none"
             aria-hidden="true"
           >
             <path
-              stroke="#FFFFFF"
+              stroke="#115E59"
               strokeWidth="28"
               strokeLinecap="round"
               strokeLinejoin="round"
@@ -30,17 +56,32 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
           <span>LYGA</span>
         </a>
         <nav className={styles.nav} aria-label="Primary">
-          <a href="#pricing" className={styles.link}>
+          <a
+            href="#pricing"
+            className={`${styles.link} ${activeSection === 'pricing' ? styles.linkActive : ''}`}
+            onClick={() => setActiveSection('pricing')}
+          >
             Pricing
           </a>
-          <a href="#faq" className={styles.link}>
+          <a
+            href="#faq"
+            className={`${styles.link} ${activeSection === 'faq' ? styles.linkActive : ''}`}
+            onClick={() => setActiveSection('faq')}
+          >
             FAQ
           </a>
-          <Button size="sm" className={styles.ctaButton} onClick={onOpenWaitlist}>
+        </nav>
+        <div className={styles.actions}>
+          <Button
+            size="sm"
+            radius="xl"
+            className={styles.ctaButton}
+            onClick={onOpenWaitlist}
+          >
             Join Early Access
           </Button>
-        </nav>
-      </div>
-    </header>
+        </div>
+      </header>
+    </div>
   );
 }

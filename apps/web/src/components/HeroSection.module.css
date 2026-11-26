@@ -4,7 +4,7 @@
     radial-gradient(ellipse 80% 45% at 50% 100%, rgba(94, 234, 212, 0.18), transparent 70%),
     linear-gradient(180deg, #072b28 0%, #0e4e49 45%, #16776f 100%);
   color: #ffffff;
-  min-height: 480px;
+  min-height: 510px;
   display: flex;
   align-items: center;
 }
@@ -13,9 +13,9 @@
   position: relative;
   width: 100%;
   max-width: 1040px;
-  min-height: 420px;
+  min-height: 440px;
   margin: 0 auto;
-  padding: 80px 24px 96px;
+  padding: 104px 24px 96px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -199,7 +199,7 @@
 
 .cornerPc {
   right: 36px;
-  top: 32px;
+  top: 86px;
   animation: pcAbsorb 17s ease-out 3s infinite;
 }
 
@@ -284,14 +284,14 @@
 
 .orbitSend {
   offset-path: path(
-    'M 50 374 C 10 210, 140 160, 130 90 C 120 20, 380 28, 520 44 C 680 62, 820 12, 990 47'
+    'M 50 388 C 15 240, 130 190, 145 125 C 165 78, 380 88, 520 98 C 680 110, 830 82, 990 102'
   );
   animation: sendToPc 17s cubic-bezier(0.42, 0, 0.58, 1) 3s infinite both;
 }
 
 .orbitReturn {
   offset-path: path(
-    'M 990 47 C 960 190, 880 230, 895 310 C 910 380, 620 390, 440 365 C 240 338, 120 405, 50 374'
+    'M 990 102 C 960 225, 880 255, 895 325 C 910 388, 620 398, 440 374 C 240 348, 120 412, 50 388'
   );
   animation: returnToPhone 17s cubic-bezier(0.42, 0, 0.58, 1) 3s infinite both;
 }
@@ -340,12 +340,12 @@
 
 @media (max-width: 900px) {
   .section {
-    min-height: 360px;
+    min-height: 430px;
   }
 
   .inner {
-    min-height: 320px;
-    padding: 56px 16px 68px;
+    min-height: 390px;
+    padding: 96px 16px 68px;
   }
 
   .cornerPhone {
@@ -355,6 +355,6 @@
 
   .cornerPc {
     right: 16px;
-    top: 16px;
+    top: 76px;
   }
 }

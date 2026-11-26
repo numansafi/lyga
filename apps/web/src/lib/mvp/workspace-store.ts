@@ -1,0 +1,432 @@
+import { randomBytes, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { getSupabaseAdmin } from '../supabase-admin.ts';
+import { deleteBlob } from './blob-store.ts';
+import {
+  FREE_EXPIRY_DAYS,
+  FREE_MAX_DEVICES,
+  FREE_MAX_FILE_BYTES,
+  FREE_MAX_STORAGE_BYTES,
+  type DeviceRecord,
+  type FeedItemKind,
+  type FeedItemRecord,
+  type WorkspaceRecord,
+} from './constants.ts';
+import { publishWorkspaceEvent } from './events.ts';
+
+interface LocalMvpData {
+  workspaces: WorkspaceRecord[];
+  devices: DeviceRecord[];
+  items: FeedItemRecord[];
+}
+
+function getMvpFile(): string {
+  const dir = process.env.LYGA_MVP_DIR
+    ? process.env.LYGA_MVP_DIR
+    : path.resolve(process.cwd(), '..', '..', '.lyga-dev-data');
+  return path.join(dir, 'mvp.json');
+}
+
+let localLock: Promise<void> = Promise.resolve();
+
+function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
+  const next = localLock.then(fn, fn);
+  localLock = next.then(
+    () => undefined,
+    () => undefined
+  );
+  return next;
+}
+
+function generatePairCode(): string {
+  return randomBytes(4).toString('hex').toUpperCase();
+}
+
+async function readLocalData(): Promise<LocalMvpData> {
+  try {
+    const raw = await readFile(getMvpFile(), 'utf8');
+    return JSON.parse(raw) as LocalMvpData;
+  } catch {
+    return { workspaces: [], devices: [], items: [] };
+  }
+}
+
+async function writeLocalData(data: LocalMvpData): Promise<void> {
+  const file = getMvpFile();
+  await mkdir(path.dirname(file), { recursive: true });
+  const tmpFile = `${file}.${randomUUID()}.tmp`;
+  await writeFile(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+  await rename(tmpFile, file);
+}
+
+function isExpired(item: FeedItemRecord, nowMs: number): boolean {
+  return Boolean(item.expires_at && new Date(item.expires_at).getTime() <= nowMs);
+}
+
+export async function createWorkspaceWithDevice(
+  deviceLabel = 'Browser'
+): Promise<{ workspace: WorkspaceRecord; device: DeviceRecord }> {
+  const now = new Date().toISOString();
+  const workspace: WorkspaceRecord = {
+    id: randomUUID(),
+    pair_code: generatePairCode(),
+    max_devices: FREE_MAX_DEVICES,
+    storage_limit_bytes: FREE_MAX_STORAGE_BYTES,
+    created_at: now,
+  };
+  const device: DeviceRecord = {
+    id: randomUUID(),
+    workspace_id: workspace.id,
+    label: deviceLabel.slice(0, 40) || 'Browser',
+    created_at: now,
+    last_seen_at: now,
+  };
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error: wsErr } = await supabase.from('workspaces').insert(workspace);
+    if (wsErr) throw new Error(`Supabase workspace insert error: ${wsErr.message}`);
+    const { error: devErr } = await supabase.from('workspace_devices').insert(device);
+    if (devErr) throw new Error(`Supabase device insert error: ${devErr.message}`);
+    return { workspace, device };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.workspaces.push(workspace);
+    data.devices.push(device);
+    await writeLocalData(data);
+    return { workspace, device };
+  });
+}
+
+export async function getWorkspaceState(
+  workspaceId: string,
+  deviceId: string
+): Promise<{
+  workspace: WorkspaceRecord;
+  devices: DeviceRecord[];
+  items: FeedItemRecord[];
+  usedBytes: number;
+} | null> {
+  const nowMs = Date.now();
+  const supabase = getSupabaseAdmin();
+
+  if (supabase) {
+    const [wsRes, devRes, itemsRes] = await Promise.all([
+      supabase.from('workspaces').select('*').eq('id', workspaceId).maybeSingle(),
+      supabase
+        .from('workspace_devices')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true }),
+      supabase
+        .from('feed_items')
+        .select('*')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: false }),
+    ]);
+
+    if (!wsRes.data) return null;
+
+    const devList = (devRes.data ?? []) as DeviceRecord[];
+    if (!devList.some((d) => d.id === deviceId)) return null;
+
+    const allItems = (itemsRes.data ?? []) as FeedItemRecord[];
+    const expiredItems = allItems.filter((it) => isExpired(it, nowMs));
+    if (expiredItems.length > 0) {
+      const expiredIds = expiredItems.map((it) => it.id);
+      for (const exp of expiredItems) {
+        if (exp.blob_key) {
+          void deleteBlob(exp.blob_key).catch(() => undefined);
+        }
+      }
+      void supabase
+        .from('feed_items')
+        .delete()
+        .eq('workspace_id', workspaceId)
+        .in('id', expiredIds);
+    }
+
+    const items = allItems.filter((it) => !isExpired(it, nowMs));
+    const usedBytes = items.reduce((sum, it) => sum + Number(it.size_bytes || 0), 0);
+
+    return { workspace: wsRes.data as WorkspaceRecord, devices: devList, items, usedBytes };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const workspace = data.workspaces.find((w) => w.id === workspaceId);
+    if (!workspace) return null;
+
+    const devices = data.devices.filter((d) => d.workspace_id === workspaceId);
+    if (!devices.some((d) => d.id === deviceId)) return null;
+
+    const expiredItems = data.items.filter(
+      (it) => it.workspace_id === workspaceId && isExpired(it, nowMs)
+    );
+    if (expiredItems.length > 0) {
+      for (const exp of expiredItems) {
+        if (exp.blob_key) {
+          await deleteBlob(exp.blob_key).catch(() => undefined);
+        }
+      }
+      data.items = data.items.filter(
+        (it) => it.workspace_id !== workspaceId || !isExpired(it, nowMs)
+      );
+      await writeLocalData(data);
+    }
+
+    const items = data.items
+      .filter((it) => it.workspace_id === workspaceId)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at));
+    const usedBytes = items.reduce((sum, it) => sum + Number(it.size_bytes || 0), 0);
+
+    return { workspace, devices, items, usedBytes };
+  });
+}
+
+export async function pairDeviceByCode(
+  pairCode: string,
+  deviceLabel = 'Phone Browser'
+): Promise<{ ok: true; workspace: WorkspaceRecord; device: DeviceRecord } | { ok: false; reason: 'not_found' | 'device_limit' }> {
+  const code = pairCode.trim().toUpperCase();
+  const now = new Date().toISOString();
+  const label = deviceLabel.slice(0, 40) || 'Phone Browser';
+  const supabase = getSupabaseAdmin();
+
+  if (supabase) {
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('pair_code', code)
+      .maybeSingle();
+    if (!ws) return { ok: false, reason: 'not_found' };
+
+    const workspace = ws as WorkspaceRecord;
+    const { count } = await supabase
+      .from('workspace_devices')
+      .select('id', { count: 'exact', head: true })
+      .eq('workspace_id', workspace.id);
+
+    if ((count ?? 0) >= workspace.max_devices) {
+      return { ok: false, reason: 'device_limit' };
+    }
+
+    const device: DeviceRecord = {
+      id: randomUUID(),
+      workspace_id: workspace.id,
+      label,
+      created_at: now,
+      last_seen_at: now,
+    };
+    const { error } = await supabase.from('workspace_devices').insert(device);
+    if (error) throw new Error(`Supabase pair error: ${error.message}`);
+    publishWorkspaceEvent(workspace.id);
+    return { ok: true, workspace, device };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const workspace = data.workspaces.find((w) => w.pair_code === code);
+    if (!workspace) return { ok: false, reason: 'not_found' };
+
+    const existingDevices = data.devices.filter((d) => d.workspace_id === workspace.id);
+    if (existingDevices.length >= workspace.max_devices) {
+      return { ok: false, reason: 'device_limit' };
+    }
+
+    const device: DeviceRecord = {
+      id: randomUUID(),
+      workspace_id: workspace.id,
+      label,
+      created_at: now,
+      last_seen_at: now,
+    };
+    data.devices.push(device);
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspace.id);
+    return { ok: true, workspace, device };
+  });
+}
+
+export async function addFeedItem(input: {
+  workspaceId: string;
+  deviceId: string;
+  kind: FeedItemKind;
+  encryptedMeta: string;
+  encryptedBody: string | null;
+  blobKey: string | null;
+  sizeBytes: number;
+  chunkCount: number;
+}): Promise<{ ok: true; item: FeedItemRecord } | { ok: false; reason: 'unauthorized' | 'file_too_large' | 'storage_full' }> {
+  if (input.sizeBytes > FREE_MAX_FILE_BYTES) {
+    return { ok: false, reason: 'file_too_large' };
+  }
+
+  const state = await getWorkspaceState(input.workspaceId, input.deviceId);
+  if (!state) return { ok: false, reason: 'unauthorized' };
+
+  if (state.usedBytes + input.sizeBytes > state.workspace.storage_limit_bytes) {
+    return { ok: false, reason: 'storage_full' };
+  }
+
+  const now = new Date();
+  const isFileLike = input.kind === 'media' || input.kind === 'file';
+  const expiresAt = isFileLike
+    ? new Date(now.getTime() + FREE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
+    : null;
+
+  const item: FeedItemRecord = {
+    id: randomUUID(),
+    workspace_id: input.workspaceId,
+    kind: input.kind,
+    encrypted_meta: input.encryptedMeta,
+    encrypted_body: input.encryptedBody,
+    blob_key: input.blobKey,
+    size_bytes: input.sizeBytes,
+    chunk_count: input.chunkCount,
+    expires_at: expiresAt,
+    created_at: now.toISOString(),
+  };
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase.from('feed_items').insert(item);
+    if (error) throw new Error(`Supabase item insert error: ${error.message}`);
+    publishWorkspaceEvent(input.workspaceId);
+    return { ok: true, item };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.items.push(item);
+    await writeLocalData(data);
+    publishWorkspaceEvent(input.workspaceId);
+    return { ok: true, item };
+  });
+}
+
+export async function removeFeedItem(
+  workspaceId: string,
+  deviceId: string,
+  itemId: string
+): Promise<boolean> {
+  const state = await getWorkspaceState(workspaceId, deviceId);
+  if (!state) return false;
+
+  const target = state.items.find((it) => it.id === itemId);
+  if (!target) return false;
+
+  if (target.blob_key) {
+    void deleteBlob(target.blob_key).catch(() => undefined);
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase
+      .from('feed_items')
+      .delete()
+      .eq('id', itemId)
+      .eq('workspace_id', workspaceId);
+    if (error) throw new Error(`Supabase item delete error: ${error.message}`);
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.items = data.items.filter((it) => !(it.id === itemId && it.workspace_id === workspaceId));
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  });
+}
+
+export async function updateFeedItem(input: {
+  workspaceId: string;
+  deviceId: string;
+  itemId: string;
+  kind: FeedItemKind;
+  encryptedMeta: string;
+  encryptedBody: string | null;
+}): Promise<FeedItemRecord | null> {
+  const state = await getWorkspaceState(input.workspaceId, input.deviceId);
+  if (!state) return null;
+
+  const target = state.items.find((it) => it.id === input.itemId);
+  if (!target) return null;
+
+  const updated: FeedItemRecord = {
+    ...target,
+    kind: input.kind,
+    encrypted_meta: input.encryptedMeta,
+    encrypted_body: input.encryptedBody,
+  };
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase
+      .from('feed_items')
+      .update({
+        kind: updated.kind,
+        encrypted_meta: updated.encrypted_meta,
+        encrypted_body: updated.encrypted_body,
+      })
+      .eq('id', input.itemId)
+      .eq('workspace_id', input.workspaceId);
+    if (error) throw new Error(`Supabase item update error: ${error.message}`);
+    publishWorkspaceEvent(input.workspaceId);
+    return updated;
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.items = data.items.map((it) =>
+      it.id === input.itemId && it.workspace_id === input.workspaceId ? updated : it
+    );
+    await writeLocalData(data);
+    publishWorkspaceEvent(input.workspaceId);
+    return updated;
+  });
+}
+
+export async function removeWorkspaceDevice(
+  workspaceId: string,
+  requesterDeviceId: string,
+  targetDeviceId: string
+): Promise<{ ok: true } | { ok: false; reason: 'unauthorized' | 'not_found' | 'last_device' }> {
+  const state = await getWorkspaceState(workspaceId, requesterDeviceId);
+  if (!state) return { ok: false, reason: 'unauthorized' };
+
+  if (!state.devices.some((d) => d.id === targetDeviceId)) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  if (state.devices.length <= 1) {
+    return { ok: false, reason: 'last_device' };
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase
+      .from('workspace_devices')
+      .delete()
+      .eq('id', targetDeviceId)
+      .eq('workspace_id', workspaceId);
+    if (error) throw new Error(`Supabase device delete error: ${error.message}`);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.devices = data.devices.filter(
+      (d) => !(d.id === targetDeviceId && d.workspace_id === workspaceId)
+    );
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true };
+  });
+}

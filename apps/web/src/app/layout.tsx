@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Bricolage_Grotesque, JetBrains_Mono } from 'next/font/google';
 import {
   ColorSchemeScript,
@@ -71,11 +71,23 @@ const SITE_TITLE = 'Lyga — DM yourself the important stuff';
 const SITE_DESCRIPTION =
   'Send full-size videos, photos, and any file between your phone and computer in one encrypted timeline.';
 
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  viewportFit: 'cover',
+  interactiveWidget: 'resizes-content',
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   manifest: '/site.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Lyga',
+  },
   icons: {
     icon: [
       { url: '/favicon.ico', sizes: 'any' },

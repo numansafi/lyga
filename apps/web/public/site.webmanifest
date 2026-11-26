@@ -1,5 +1,8 @@
 {
   "name": "Lyga",
+  "short_name": "Lyga",
+  "start_url": "/app",
+  "scope": "/",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -18,7 +21,7 @@
       "purpose": "maskable"
     }
   ],
-  "theme_color": "#115E59",
-  "background_color": "#115E59",
+  "theme_color": "#0b2623",
+  "background_color": "#061a18",
   "display": "standalone"
 }

@@ -1,7 +1,7 @@
-import { createClient } from '@supabase/supabase-js';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import type { WaitlistPlan } from './analytics';
+import { getSupabaseAdmin } from './supabase-admin.ts';
 
 export interface WaitlistEntry {
   email: string;
@@ -15,18 +15,6 @@ export interface WaitlistEntry {
 const DEV_DIR =
   process.env.LYGA_WAITLIST_DIR || path.resolve(process.cwd(), '..', '..', '.lyga-dev-data');
 const DEV_FILE = path.join(DEV_DIR, 'waitlist.json');
-
-function getSupabaseAdmin() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !key) {
-    if (process.env.NODE_ENV === 'production' && process.env.LYGA_LOCAL_WAITLIST !== 'true') {
-      throw new Error('Supabase environment variables are required in production.');
-    }
-    return null;
-  }
-  return createClient(url, key, { auth: { persistSession: false } });
-}
 
 async function readDevEntries(): Promise<WaitlistEntry[]> {
   try {
