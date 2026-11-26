@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Alert, Button, Loader, Modal, Progress } from '@mantine/core';
+import { Alert, Button, Loader, Modal } from '@mantine/core';
 import {
   ArrowDownToLine,
   Camera,
@@ -43,6 +43,7 @@ import {
 } from 'react-file-icon';
 import { LygaQrCode } from '@/components/LygaQrCode';
 import {
+  FREE_EXPIRY_DAYS,
   FREE_MAX_STORAGE_BYTES,
   type FeedItemKind,
   type FeedItemRecord,
@@ -237,6 +238,7 @@ export default function WorkspacePage() {
   const [editDraft, setEditDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [showQr, setShowQr] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -1139,20 +1141,44 @@ export default function WorkspacePage() {
     return groups;
   }, [deviceFilter, deviceId, filter, items, pinnedIds, searchQuery, sortBy]);
 
-  const storagePct = Math.min(100, Math.round((usedBytes / FREE_MAX_STORAGE_BYTES) * 100));
+  const vaultBreakdown = useMemo(() => {
+    let mediaBytes = 0;
+    let mediaCount = 0;
+    let fileBytes = 0;
+    let fileCount = 0;
+    let noteBytes = 0;
+    let noteCount = 0;
+    for (const item of items) {
+      const size = Number(item.raw.size_bytes || 0);
+      if (item.raw.kind === 'media') {
+        mediaBytes += size;
+        mediaCount += 1;
+      } else if (item.raw.kind === 'file') {
+        fileBytes += size;
+        fileCount += 1;
+      } else {
+        noteBytes += size;
+        noteCount += 1;
+      }
+    }
+    const pct = (b: number) =>
+      b > 0 ? Math.max(2, Math.round((b / FREE_MAX_STORAGE_BYTES) * 1000) / 10) : 0;
+    return {
+      mediaBytes,
+      mediaCount,
+      mediaPct: pct(mediaBytes),
+      fileBytes,
+      fileCount,
+      filePct: pct(fileBytes),
+      noteBytes,
+      noteCount,
+      notePct: pct(noteBytes),
+    };
+  }, [items]);
 
   const renderQrCard = () => (
     <div className={styles.qrCard}>
       <div className={styles.qrHero}>
-        <span
-          className={`${styles.qrStatusPill} ${
-            deviceCount >= 2 ? styles.qrStatusPillConnected : ''
-          }`}
-        >
-          <span className={styles.qrPulseDot} aria-hidden="true" />
-          {deviceCount >= 2 ? 'Phone connected' : 'Ready to scan'}
-        </span>
-
         <div className={styles.qrStage}>
           <span className={`${styles.cornerBracket} ${styles.cornerTL}`} aria-hidden="true" />
           <span className={`${styles.cornerBracket} ${styles.cornerTR}`} aria-hidden="true" />
@@ -1160,33 +1186,20 @@ export default function WorkspacePage() {
           <span className={`${styles.cornerBracket} ${styles.cornerBR}`} aria-hidden="true" />
 
           <div className={styles.qrBox}>
-            <LygaQrCode value={pairUrl} size={184} />
+            <LygaQrCode value={pairUrl} size={124} />
     </div>
     </div>
     </div>
 
       <div className={styles.qrBody}>
-        <div className={styles.qrTitle}>Scan to connect your phone</div>
+        <div className={styles.qrTitle}>Scan to connect phone</div>
         <p className={styles.qrDesc}>
-          Point your camera at the code. Your encryption key stays on your devices only.
+          Scan with your phone camera to sync.
         </p>
-        {workspace && (
-          <div className={styles.pairCodePill}>
-            <Lock size={12} aria-hidden="true" />
-            <span className={styles.pairCodeLabel}>Code</span>
-            <span>
-              {workspace.pair_code.length === 8
-                ? `${workspace.pair_code.slice(0, 4)} ${workspace.pair_code.slice(4)}`
-                : workspace.pair_code}
-            </span>
-    </div>
-        )}
-        <Button
-          size="sm"
-          variant="light"
-          fullWidth
-          className={styles.copyPairBtn}
-          leftSection={pairCopied ? <Check size={14} /> : <Copy size={14} />}
+        <button
+          type="button"
+          className={styles.qrCopyLinkBtn}
+          aria-label={pairCopied ? 'Pair link copied' : 'Copy pair link'}
           disabled={!pairUrl}
           onClick={() => {
             void navigator.clipboard.writeText(pairUrl);
@@ -1194,8 +1207,9 @@ export default function WorkspacePage() {
             window.setTimeout(() => setPairCopied(false), 1400);
           }}
         >
-          {pairCopied ? 'Pair link copied' : 'Copy pair link'}
-        </Button>
+          {pairCopied ? <Check size={11} /> : <Copy size={11} />}
+          <span>{pairCopied ? 'Copied' : 'Copy pair link'}</span>
+        </button>
     </div>
     </div>
   );
@@ -1204,19 +1218,30 @@ export default function WorkspacePage() {
     <div className={styles.deviceCard}>
       <div className={styles.deviceRow}>
         <span className={styles.deviceHeading}>This device</span>
-        {!editingName && deviceId && (
-          <button
-            type="button"
-            className={styles.deviceIconBtn}
-            aria-label="Rename this device"
-            onClick={() => {
-              setNameDraft(myDeviceName);
-              setEditingName(true);
-            }}
-          >
-            <Pencil size={13} />
-          </button>
-        )}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+          {devices.length >= 2 && (
+            <button
+              type="button"
+              className={styles.qrToggleBtn}
+              onClick={() => setShowQr((prev) => !prev)}
+            >
+              {showQr ? 'Hide QR' : 'Show QR'}
+            </button>
+          )}
+          {!editingName && deviceId && (
+            <button
+              type="button"
+              className={styles.deviceIconBtn}
+              aria-label="Rename this device"
+              onClick={() => {
+                setNameDraft(myDeviceName);
+                setEditingName(true);
+              }}
+            >
+              <Pencil size={13} />
+            </button>
+          )}
+        </div>
     </div>
       {editingName && deviceId ? (
         <form
@@ -1271,10 +1296,10 @@ export default function WorkspacePage() {
                   <button
                     type="button"
                     className={styles.removeDevBtn}
-                    aria-label={`Remove ${label}`}
+                    aria-label={`Disconnect ${label}`}
                     onClick={() => void handleRemoveDevice(dev.id)}
                   >
-                    <X size={13} />
+                    Disconnect
                   </button>
                 )}
     </div>
@@ -1320,10 +1345,75 @@ export default function WorkspacePage() {
   const renderStorageCard = () => (
     <div className={styles.storageCard}>
       <div className={styles.storageRow}>
-        <span>Storage</span>
-        <span>{formatBytes(usedBytes)} / 2.00 GB</span>
-    </div>
-      <Progress value={storagePct} color="spruce" size="xs" />
+        <span>Encrypted Vault</span>
+        <span>{formatBytes(usedBytes)} / {formatBytes(FREE_MAX_STORAGE_BYTES)}</span>
+      </div>
+      <div className={styles.vaultBarTrack} aria-hidden="true">
+        {vaultBreakdown.mediaPct > 0 && (
+          <div
+            className={styles.vaultSeg}
+            style={{ width: `${vaultBreakdown.mediaPct}%`, backgroundColor: '#2dd4bf' }}
+          />
+        )}
+        {vaultBreakdown.filePct > 0 && (
+          <div
+            className={styles.vaultSeg}
+            style={{ width: `${vaultBreakdown.filePct}%`, backgroundColor: '#60a5fa' }}
+          />
+        )}
+        {vaultBreakdown.notePct > 0 && (
+          <div
+            className={styles.vaultSeg}
+            style={{ width: `${vaultBreakdown.notePct}%`, backgroundColor: '#a78bfa' }}
+          />
+        )}
+      </div>
+      <div className={styles.vaultList}>
+        <button
+          type="button"
+          className={styles.vaultItemBtn}
+          onClick={() => setFilter('media')}
+        >
+          <span className={styles.vaultItemLeft}>
+            <span className={styles.vaultSwatch} style={{ backgroundColor: '#2dd4bf' }} />
+            <span>Photos &amp; Videos</span>
+          </span>
+          <span className={styles.vaultItemValue}>
+            {formatBytes(vaultBreakdown.mediaBytes)} ({vaultBreakdown.mediaCount})
+          </span>
+        </button>
+        <button
+          type="button"
+          className={styles.vaultItemBtn}
+          onClick={() => setFilter('file')}
+        >
+          <span className={styles.vaultItemLeft}>
+            <span className={styles.vaultSwatch} style={{ backgroundColor: '#60a5fa' }} />
+            <span>Files &amp; PDFs</span>
+          </span>
+          <span className={styles.vaultItemValue}>
+            {formatBytes(vaultBreakdown.fileBytes)} ({vaultBreakdown.fileCount})
+          </span>
+        </button>
+        <button
+          type="button"
+          className={styles.vaultItemBtn}
+          onClick={() => setFilter('text')}
+        >
+          <span className={styles.vaultItemLeft}>
+            <span className={styles.vaultSwatch} style={{ backgroundColor: '#a78bfa' }} />
+            <span>Notes &amp; Links</span>
+          </span>
+          <span className={styles.vaultItemValue}>
+            {formatBytes(vaultBreakdown.noteBytes)} ({vaultBreakdown.noteCount})
+          </span>
+        </button>
+      </div>
+      <div className={styles.vaultDivider} />
+      <div className={styles.vaultMetaRow}>
+        <span>Auto-expiry</span>
+        <span>{FREE_EXPIRY_DAYS} days (Free)</span>
+      </div>
       <button
         type="button"
         className={styles.upgradeLink}
@@ -2066,7 +2156,7 @@ export default function WorkspacePage() {
                                     {item.meta.fileName || item.meta.title}
     </div>
                                   <div className={styles.attachmentSub}>
-                                    {formatBytes(item.raw.size_bytes)} · Original quality · 7d
+                                    {formatBytes(item.raw.size_bytes)} · Original quality · {FREE_EXPIRY_DAYS}d
     </div>
     </div>
                                 {pKind && (
@@ -2276,7 +2366,7 @@ export default function WorkspacePage() {
                   ref={textareaRef}
                   rows={1}
                   className={styles.composerInput}
-                  placeholder="Text yourself anything — links, 4K clips, screenshots…"
+                  placeholder="Send a note, link, or file…"
                   value={draft}
                   onChange={(e) => setDraft(e.currentTarget.value)}
                   onPaste={(e) => {
@@ -2334,22 +2424,9 @@ export default function WorkspacePage() {
       </section>
 
       <aside className={styles.rail} aria-label="Workspace devices and pairing">
-        <div className={styles.railTop}>
-          <Link href="/" className={styles.brandLink}>
-            Lyga
-          </Link>
-          <Button
-            size="xs"
-            variant="light"
-            onClick={() => setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.')}
-          >
-            Pro £5/mo
-          </Button>
-    </div>
-
-        {renderQrCard()}
-        {renderDeviceCard()}
+        {(devices.length < 2 || showQr) && renderQrCard()}
         {renderStorageCard()}
+        {renderDeviceCard()}
       </aside>
 
       <Modal
@@ -2366,9 +2443,9 @@ export default function WorkspacePage() {
         }}
       >
         <div className={styles.mobileModalStack}>
-          {renderQrCard()}
-          {renderDeviceCard()}
+          {(devices.length < 2 || showQr) && renderQrCard()}
           {renderStorageCard()}
+          {renderDeviceCard()}
     </div>
       </Modal>
 
