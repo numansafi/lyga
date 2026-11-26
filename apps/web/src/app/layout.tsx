@@ -78,8 +78,29 @@ export const viewport: Viewport = {
   interactiveWidget: 'resizes-content',
 };
 
+function resolveMetadataBase(): URL {
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+      : undefined,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+    'http://localhost:3000',
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    try {
+      const normalized = raw.startsWith('http://') || raw.startsWith('https://') ? raw : `https://${raw}`;
+      return new URL(normalized);
+    } catch {
+      // try next candidate
+    }
+  }
+  return new URL('http://localhost:3000');
+}
+
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'),
+  metadataBase: resolveMetadataBase(),
   title: SITE_TITLE,
   description: SITE_DESCRIPTION,
   manifest: '/site.webmanifest',
