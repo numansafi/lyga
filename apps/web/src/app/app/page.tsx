@@ -1090,7 +1090,7 @@ export default function WorkspacePage() {
   }, [devices, deviceId, items]);
 
   const deviceOptions = useMemo(() => {
-    const peerDots = ['#38bdf8', '#a78bfa', '#fbbf24', '#fb7185'];
+    const peerDots = ['#7dd3fc', '#6ee7b7', '#93c5fd', '#5eead4'];
     const opts: Array<{ id: string; label: string; dotColor: string }> = [];
     if (deviceId) {
       opts.push({ id: deviceId, label: myDeviceName, dotColor: '#2dd4bf' });
@@ -1385,19 +1385,6 @@ export default function WorkspacePage() {
           >
             {showQr ? 'Hide QR' : 'Show QR'}
           </button>
-          {!editingName && deviceId && (
-            <button
-              type="button"
-              className={styles.deviceIconBtn}
-              aria-label="Rename this device"
-              onClick={() => {
-                setNameDraft(myDeviceName);
-                setEditingName(true);
-              }}
-            >
-              <Pencil size={13} />
-            </button>
-          )}
         </div>
     </div>
       {showQr && renderQrCard()}
@@ -1413,6 +1400,7 @@ export default function WorkspacePage() {
           <input
             type="text"
             className={styles.deviceInput}
+            aria-label="Device name"
             value={nameDraft}
             maxLength={32}
             autoFocus
@@ -1448,7 +1436,21 @@ export default function WorkspacePage() {
                   <span className={styles.connectedDevName}>{label}</span>
                   {isCurrent && <span className={styles.connectedDevTag}>you</span>}
     </div>
-                {!isCurrent && (
+                {isCurrent ? (
+                  !editingName && (
+                    <button
+                      type="button"
+                      className={styles.deviceIconBtn}
+                      aria-label={`Rename ${label}`}
+                      onClick={() => {
+                        setNameDraft(myDeviceName);
+                        setEditingName(true);
+                      }}
+                    >
+                      <Pencil size={12} />
+                    </button>
+                  )
+                ) : (
                   <button
                     type="button"
                     className={styles.removeDevBtn}

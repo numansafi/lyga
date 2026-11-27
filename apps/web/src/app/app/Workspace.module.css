@@ -241,8 +241,8 @@
 }
 
 .peer0 {
-  background: #162b3a;
-  border-color: #2a506b;
+  background: rgba(125, 211, 252, 0.04);
+  border-color: rgba(125, 211, 252, 0.34);
 }
 
 .peer0 .senderCaption {
@@ -250,30 +250,30 @@
 }
 
 .peer1 {
-  background: #241d3b;
-  border-color: #473a73;
+  background: rgba(110, 231, 183, 0.04);
+  border-color: rgba(110, 231, 183, 0.34);
 }
 
 .peer1 .senderCaption {
-  color: #c4b5fd;
+  color: #6ee7b7;
 }
 
 .peer2 {
-  background: #2b2316;
-  border-color: #5c4828;
+  background: rgba(147, 197, 253, 0.04);
+  border-color: rgba(147, 197, 253, 0.34);
 }
 
 .peer2 .senderCaption {
-  color: #fcd34d;
+  color: #93c5fd;
 }
 
 .peer3 {
-  background: #2d1a22;
-  border-color: #633649;
+  background: rgba(94, 234, 212, 0.04);
+  border-color: rgba(94, 234, 212, 0.34);
 }
 
 .peer3 .senderCaption {
-  color: #fda4af;
+  color: #5eead4;
 }
 
 .senderCaption {
