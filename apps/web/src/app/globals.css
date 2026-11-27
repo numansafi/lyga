@@ -1,6 +1,8 @@
 @import '@mantine/core/styles.css';
 
 :root {
+  --font-sans: 'Bricolage Grotesque';
+  --font-mono: 'JetBrains Mono';
   --bg-page: #ffffff;
   --bg-surface: #f6f7f9;
   --border-subtle: #e5e7eb;

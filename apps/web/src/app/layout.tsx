@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import { Bricolage_Grotesque, JetBrains_Mono } from 'next/font/google';
 import {
   ColorSchemeScript,
   MantineProvider,
@@ -7,18 +6,6 @@ import {
   mantineHtmlProps,
 } from '@mantine/core';
 import './globals.css';
-
-const bricolage = Bricolage_Grotesque({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700', '800'],
-  variable: '--font-sans',
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-mono',
-});
 
 const theme = createTheme({
   fontFamily: 'var(--font-sans), -apple-system, BlinkMacSystemFont, sans-serif',
@@ -136,13 +123,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className={`${bricolage.variable} ${jetbrainsMono.variable}`}
-      {...mantineHtmlProps}
-    >
+    <html lang="en" {...mantineHtmlProps}>
       <head>
         <ColorSchemeScript defaultColorScheme="light" />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400..800&family=JetBrains+Mono:wght@400;500&display=swap"
+        />
       </head>
       <body>
         <MantineProvider theme={theme} defaultColorScheme="light">
