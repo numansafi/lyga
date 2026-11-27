@@ -242,6 +242,7 @@ export default function WorkspacePage() {
   const [editDraft, setEditDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -252,6 +253,7 @@ export default function WorkspacePage() {
   const accountMenuDesktopRef = useRef<HTMLDivElement>(null);
   const accountMenuMobileRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const streamRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const filterRef = useRef(filter);
   filterRef.current = filter;
@@ -422,8 +424,11 @@ export default function WorkspacePage() {
   }, [workspaceId, loadWorkspace]);
 
   useEffect(() => {
-    if (filter === 'all') {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (filter === 'all' && streamRef.current) {
+      streamRef.current.scrollTo({
+        top: streamRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
     }
   }, [items.length, filter]);
 
@@ -435,27 +440,64 @@ export default function WorkspacePage() {
   }, [draft]);
 
   useEffect(() => {
+    const mq = window.matchMedia?.('(pointer: coarse)');
+    const syncPointer = () => setIsTouchDevice(mq?.matches ?? false);
+    syncPointer();
+    mq?.addEventListener?.('change', syncPointer);
+    return () => mq?.removeEventListener?.('change', syncPointer);
+  }, []);
+
+  useEffect(() => {
     const root = document.documentElement;
     const prevHtmlBg = root.style.backgroundColor;
     const prevBodyBg = document.body.style.backgroundColor;
+    const prevHtmlOverflow = root.style.overflow;
+    const prevBodyOverflow = document.body.style.overflow;
+    const prevOverscroll = root.style.overscrollBehavior;
+
+    const restoreRootStyles = () => {
+      root.style.removeProperty('--app-height');
+      root.style.removeProperty('--app-offset-top');
+      delete root.dataset.kb;
+      root.style.backgroundColor = prevHtmlBg;
+      document.body.style.backgroundColor = prevBodyBg;
+      root.style.overflow = prevHtmlOverflow;
+      document.body.style.overflow = prevBodyOverflow;
+      root.style.overscrollBehavior = prevOverscroll;
+    };
+
     root.style.backgroundColor = '#061a18';
     document.body.style.backgroundColor = '#061a18';
+    root.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    root.style.overscrollBehavior = 'none';
 
     const vv = window.visualViewport;
     if (!vv) {
-      return () => {
-        root.style.backgroundColor = prevHtmlBg;
-        document.body.style.backgroundColor = prevBodyBg;
-      };
+      return restoreRootStyles;
     }
 
     let prevHeight = vv.height;
+    let baselineHeight = vv.height;
+    let prevWidth = vv.width;
 
     const syncViewport = () => {
+      if (Math.abs(vv.width - prevWidth) > 10) {
+        baselineHeight = vv.height;
+        prevWidth = vv.width;
+      } else if (vv.height > baselineHeight) {
+        baselineHeight = vv.height;
+      }
+
       root.style.setProperty('--app-height', `${vv.height}px`);
+      root.style.setProperty('--app-offset-top', `${vv.offsetTop}px`);
+      root.dataset.kb = vv.height < baselineHeight - 100 ? 'open' : 'closed';
+
       if (vv.height < prevHeight - 80 && filterRef.current === 'all') {
         requestAnimationFrame(() => {
-          bottomRef.current?.scrollIntoView({ behavior: 'auto' });
+          if (streamRef.current) {
+            streamRef.current.scrollTop = streamRef.current.scrollHeight;
+          }
         });
       }
       prevHeight = vv.height;
@@ -467,9 +509,7 @@ export default function WorkspacePage() {
     return () => {
       vv.removeEventListener('resize', syncViewport);
       vv.removeEventListener('scroll', syncViewport);
-      root.style.removeProperty('--app-height');
-      root.style.backgroundColor = prevHtmlBg;
-      document.body.style.backgroundColor = prevBodyBg;
+      restoreRootStyles();
     };
   }, []);
 
@@ -1660,7 +1700,7 @@ export default function WorkspacePage() {
     </div>
         </header>
 
-        <div className={styles.messageStream}>
+        <div ref={streamRef} className={styles.messageStream}>
           {filter !== 'all' ? (
             <div className={styles.categoryView}>
               <div className={styles.categoryToolbar}>
@@ -2427,7 +2467,7 @@ export default function WorkspacePage() {
             {filter === 'all' ? (
               <div className={styles.composerBar}>
                 <div className={styles.attachMenuWrap} ref={attachMenuWrapRef}>
-                  {attachMenuOpen && (
+                  {!isTouchDevice && attachMenuOpen && (
                     <div
                       className={styles.attachPopover}
                       role="menu"
@@ -2489,17 +2529,36 @@ export default function WorkspacePage() {
                       </button>
                     </div>
                   )}
-                  <button
-                    type="button"
-                    className={`${styles.attachBtn} ${attachMenuOpen ? styles.attachBtnOpen : ''}`}
-                    aria-label={attachMenuOpen ? 'Close attachment menu' : 'Open attachment menu'}
-                    aria-expanded={attachMenuOpen}
-                    aria-haspopup="menu"
-                    disabled={sending}
-                    onClick={() => setAttachMenuOpen((prev) => !prev)}
-                  >
-                    <Plus size={18} />
-                  </button>
+                  {isTouchDevice ? (
+                    <>
+                      <span className={styles.attachBtn} aria-hidden="true">
+                        <Plus size={18} />
+                      </span>
+                      <input
+                        type="file"
+                        multiple
+                        aria-label="Attach photos, videos, or files"
+                        className={styles.attachNativeOverlay}
+                        disabled={sending}
+                        onChange={(e) => {
+                          void handleSendFiles(e.currentTarget.files);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`${styles.attachBtn} ${attachMenuOpen ? styles.attachBtnOpen : ''}`}
+                      aria-label={attachMenuOpen ? 'Close attachment menu' : 'Open attachment menu'}
+                      aria-expanded={attachMenuOpen}
+                      aria-haspopup="menu"
+                      disabled={sending}
+                      onClick={() => setAttachMenuOpen((prev) => !prev)}
+                    >
+                      <Plus size={18} />
+                    </button>
+                  )}
                 </div>
 
                 <textarea
