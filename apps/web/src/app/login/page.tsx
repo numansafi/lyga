@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Button, Loader } from '@mantine/core';
 import { Eye, EyeOff, Lock, Mail, RefreshCw, X } from 'lucide-react';
 import { LygaQrCode } from '@/components/LygaQrCode';
+import { validateAuthEmail } from '@/lib/email-validation';
 import { detectDeviceName } from '@/lib/mvp/device-label';
 import { saveWorkspaceKey } from '@/lib/mvp/key-store';
 import { createEphemeralQrKey, decryptWmkFromQr } from '@/lib/mvp/qr-crypto';
@@ -31,7 +32,15 @@ export default function LoginPage() {
   const qrKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+    otp?: string;
+  }>({});
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const emailInputRef = useRef<HTMLInputElement>(null);
+  const passwordInputRef = useRef<HTMLInputElement>(null);
+  const otpInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let active = true;
@@ -162,8 +171,14 @@ export default function LoginPage() {
     e.preventDefault();
     setErrorMsg(null);
     setInfoMsg(null);
-    const cleanEmail = email.trim();
-    if (!cleanEmail) return;
+    const check = validateAuthEmail(email);
+    if (!check.valid) {
+      setFieldErrors({ email: check.error ?? 'Please enter a valid email address.' });
+      emailInputRef.current?.focus();
+      return;
+    }
+    setFieldErrors({});
+    const cleanEmail = check.normalized;
 
     if (!supabase) {
       setLoading(true);
@@ -210,11 +225,18 @@ export default function LoginPage() {
     e.preventDefault();
     if (!supabase) return;
     setErrorMsg(null);
+    const cleanCode = otpCode.trim();
+    if (!cleanCode) {
+      setFieldErrors({ otp: 'Enter the 6-digit code from your email.' });
+      otpInputRef.current?.focus();
+      return;
+    }
+    setFieldErrors({});
     setLoading(true);
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim(),
-        token: otpCode.trim(),
+        email: email.trim().toLowerCase(),
+        token: cleanCode,
         type: 'email',
       });
       if (error || !data.session?.access_token) {
@@ -229,16 +251,84 @@ export default function LoginPage() {
     }
   };
 
+  const handleEmailBlur = () => {
+    if (!email.trim()) return;
+    const check = validateAuthEmail(email);
+    setFieldErrors((prev) => ({
+      ...prev,
+      email: check.valid ? undefined : (check.error ?? 'Please enter a valid email address.'),
+    }));
+  };
+
+  const handlePasswordBlur = () => {
+    if (!password) return;
+    setFieldErrors((prev) => ({
+      ...prev,
+      password: password.length < 6 ? 'Password must be at least 6 characters.' : undefined,
+    }));
+  };
+
+  const handleForgotPassword = async () => {
+    if (!supabase) return;
+    setErrorMsg(null);
+    setInfoMsg(null);
+    if (!email.trim()) {
+      setFieldErrors({ email: 'Enter your email above to reset your password.' });
+      emailInputRef.current?.focus();
+      return;
+    }
+    const check = validateAuthEmail(email);
+    if (!check.valid) {
+      setFieldErrors({ email: check.error ?? 'Please enter a valid email address.' });
+      emailInputRef.current?.focus();
+      return;
+    }
+    setFieldErrors({});
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(check.normalized, {
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+      if (error) {
+        setErrorMsg(error.message);
+        return;
+      }
+      setInfoMsg('If an account exists for that email, we sent a password reset link.');
+    } catch {
+      setErrorMsg('Unable to send password reset email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handlePasswordAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!supabase) return;
     setErrorMsg(null);
     setInfoMsg(null);
+    const check = validateAuthEmail(email);
+    const nextErrors: { email?: string; password?: string } = {};
+    if (!check.valid) {
+      nextErrors.email = check.error ?? 'Please enter a valid email address.';
+    }
+    if (password.length < 6) {
+      nextErrors.password = 'Password must be at least 6 characters.';
+    }
+    if (nextErrors.email || nextErrors.password) {
+      setFieldErrors(nextErrors);
+      if (nextErrors.email) {
+        emailInputRef.current?.focus();
+      } else {
+        passwordInputRef.current?.focus();
+      }
+      return;
+    }
+    setFieldErrors({});
     setLoading(true);
     try {
       if (isSignUp) {
         const { data, error } = await supabase.auth.signUp({
-          email: email.trim(),
+          email: check.normalized,
           password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
@@ -259,7 +349,7 @@ export default function LoginPage() {
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
+          email: check.normalized,
           password,
         });
         if (error || !data.session?.access_token) {
@@ -306,26 +396,13 @@ export default function LoginPage() {
             </span>
           </div>
 
-          <h1 className={styles.title}>Sign in or sign up</h1>
-
-          {errorMsg && (
-            <div className={styles.errorBanner} role="alert">
-              <span>{errorMsg}</span>
-              <button
-                type="button"
-                className={styles.bannerClose}
-                aria-label="Dismiss error"
-                onClick={() => setErrorMsg(null)}
-              >
-                <X size={15} />
-              </button>
-            </div>
-          )}
-          {infoMsg && (
-            <div className={styles.infoBanner} role="status">
-              <span>{infoMsg}</span>
-            </div>
-          )}
+          <h1 className={styles.title}>
+            {supabase && mode === 'password'
+              ? isSignUp
+                ? 'Create a new account'
+                : 'Log in to Lyga'
+              : 'Sign in or sign up'}
+          </h1>
 
         {supabase ? (
           <>
@@ -357,6 +434,8 @@ export default function LoginPage() {
                 onClick={() => {
                   setMode('otp');
                   setErrorMsg(null);
+                  setInfoMsg(null);
+                  setFieldErrors({});
                 }}
               >
                 Email code
@@ -369,6 +448,8 @@ export default function LoginPage() {
                 onClick={() => {
                   setMode('password');
                   setErrorMsg(null);
+                  setInfoMsg(null);
+                  setFieldErrors({});
                 }}
               >
                 Password
@@ -377,20 +458,50 @@ export default function LoginPage() {
 
             {mode === 'otp' ? (
               otpSent ? (
-                <form className={styles.form} onSubmit={(e) => void handleVerifyOtp(e)}>
+                <form className={styles.form} noValidate onSubmit={(e) => void handleVerifyOtp(e)}>
+                  {infoMsg && (
+                    <div className={styles.infoBanner} role="status">
+                      <span>{infoMsg}</span>
+                    </div>
+                  )}
                   <label className={styles.label}>
                     6-digit code from email
                     <input
+                      ref={otpInputRef}
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
-                      className={styles.input}
+                      aria-invalid={Boolean(fieldErrors.otp)}
+                      aria-describedby={fieldErrors.otp ? 'login-otp-error' : undefined}
+                      className={`${styles.input} ${fieldErrors.otp ? styles.inputError : ''}`}
                       placeholder="123456"
                       value={otpCode}
-                      onChange={(e) => setOtpCode(e.currentTarget.value)}
+                      onChange={(e) => {
+                        setOtpCode(e.currentTarget.value);
+                        if (fieldErrors.otp) setFieldErrors((prev) => ({ ...prev, otp: undefined }));
+                        if (errorMsg) setErrorMsg(null);
+                      }}
                       required
                     />
+                    {fieldErrors.otp && (
+                      <p id="login-otp-error" className={styles.fieldError} role="alert">
+                        {fieldErrors.otp}
+                      </p>
+                    )}
                   </label>
+                  {errorMsg && (
+                    <div className={styles.errorBanner} role="alert">
+                      <span>{errorMsg}</span>
+                      <button
+                        type="button"
+                        className={styles.bannerClose}
+                        aria-label="Dismiss error"
+                        onClick={() => setErrorMsg(null)}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     fullWidth
@@ -406,25 +517,53 @@ export default function LoginPage() {
                       setOtpSent(false);
                       setOtpCode('');
                       setInfoMsg(null);
+                      setErrorMsg(null);
+                      setFieldErrors({});
                     }}
                   >
                     Use a different email
                   </button>
                 </form>
               ) : (
-                <form className={styles.form} onSubmit={(e) => void handleSendOtp(e)}>
+                <form className={styles.form} noValidate onSubmit={(e) => void handleSendOtp(e)}>
                   <label className={styles.label}>
                     Email address
                     <input
+                      ref={emailInputRef}
                       type="email"
                       autoComplete="email"
-                      className={styles.input}
+                      aria-invalid={Boolean(fieldErrors.email)}
+                      aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
+                      className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.currentTarget.value)}
+                      onChange={(e) => {
+                        setEmail(e.currentTarget.value);
+                        if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                        if (errorMsg) setErrorMsg(null);
+                      }}
+                      onBlur={handleEmailBlur}
                       required
                     />
+                    {fieldErrors.email && (
+                      <p id="login-email-error" className={styles.fieldError} role="alert">
+                        {fieldErrors.email}
+                      </p>
+                    )}
                   </label>
+                  {errorMsg && (
+                    <div className={styles.errorBanner} role="alert">
+                      <span>{errorMsg}</span>
+                      <button
+                        type="button"
+                        className={styles.bannerClose}
+                        aria-label="Dismiss error"
+                        onClick={() => setErrorMsg(null)}
+                      >
+                        <X size={15} />
+                      </button>
+                    </div>
+                  )}
                   <Button
                     type="submit"
                     fullWidth
@@ -437,30 +576,63 @@ export default function LoginPage() {
                 </form>
               )
             ) : (
-              <form className={styles.form} onSubmit={(e) => void handlePasswordAuth(e)}>
+              <form className={styles.form} noValidate onSubmit={(e) => void handlePasswordAuth(e)}>
                 <label className={styles.label}>
                   Email address
                   <input
+                    ref={emailInputRef}
                     type="email"
                     autoComplete="email"
-                    className={styles.input}
+                    aria-invalid={Boolean(fieldErrors.email)}
+                    aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
+                    className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
                     placeholder="you@example.com"
                     value={email}
-                    onChange={(e) => setEmail(e.currentTarget.value)}
+                    onChange={(e) => {
+                      setEmail(e.currentTarget.value);
+                      if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                      if (errorMsg) setErrorMsg(null);
+                    }}
+                    onBlur={handleEmailBlur}
                     required
                   />
+                  {fieldErrors.email && (
+                    <p id="login-email-error" className={styles.fieldError} role="alert">
+                      {fieldErrors.email}
+                    </p>
+                  )}
                 </label>
                 <label className={styles.label}>
-                  Password
+                  <span className={styles.labelRow}>
+                    <span>Password</span>
+                    {!isSignUp && (
+                      <button
+                        type="button"
+                        className={styles.inlineLinkBtn}
+                        disabled={loading}
+                        onClick={() => void handleForgotPassword()}
+                      >
+                        Forgot password?
+                      </button>
+                    )}
+                  </span>
                   <div className={styles.passwordWrap}>
                     <input
+                      ref={passwordInputRef}
                       type={showPassword ? 'text' : 'password'}
                       autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                      className={`${styles.input} ${styles.passwordInput}`}
+                      aria-invalid={Boolean(fieldErrors.password)}
+                      aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
+                      className={`${styles.input} ${styles.passwordInput} ${fieldErrors.password ? styles.inputError : ''}`}
                       placeholder="••••••••"
                       minLength={6}
                       value={password}
-                      onChange={(e) => setPassword(e.currentTarget.value)}
+                      onChange={(e) => {
+                        setPassword(e.currentTarget.value);
+                        if (fieldErrors.password) setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                        if (errorMsg) setErrorMsg(null);
+                      }}
+                      onBlur={handlePasswordBlur}
                       required
                     />
                     <button
@@ -472,7 +644,30 @@ export default function LoginPage() {
                       {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
+                  {fieldErrors.password && (
+                    <p id="login-password-error" className={styles.fieldError} role="alert">
+                      {fieldErrors.password}
+                    </p>
+                  )}
                 </label>
+                {infoMsg && (
+                  <div className={styles.infoBanner} role="status">
+                    <span>{infoMsg}</span>
+                  </div>
+                )}
+                {errorMsg && (
+                  <div className={styles.errorBanner} role="alert">
+                    <span>{errorMsg}</span>
+                    <button
+                      type="button"
+                      className={styles.bannerClose}
+                      aria-label="Dismiss error"
+                      onClick={() => setErrorMsg(null)}
+                    >
+                      <X size={15} />
+                    </button>
+                  </div>
+                )}
                 <Button
                   type="submit"
                   fullWidth
@@ -481,29 +676,67 @@ export default function LoginPage() {
                 >
                   {isSignUp ? 'Create account →' : 'Log in →'}
                 </Button>
-                <button
-                  type="button"
-                  className={styles.linkBtn}
-                  onClick={() => setIsSignUp((v) => !v)}
-                >
-                  {isSignUp ? 'Already have an account? Log in' : 'New to Lyga? Create an account'}
-                </button>
+                <div className={styles.authSwitchRow}>
+                  <span className={styles.authSwitchHint}>
+                    {isSignUp ? 'Already have an account?' : 'New to Lyga?'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.linkBtn}
+                    onClick={() => {
+                      setIsSignUp((v) => !v);
+                      setPassword('');
+                      setShowPassword(false);
+                      setErrorMsg(null);
+                      setInfoMsg(null);
+                      setFieldErrors({});
+                    }}
+                  >
+                    {isSignUp ? 'Log in' : 'Create new account'}
+                  </button>
+                </div>
               </form>
             )}
           </>
         ) : (
-          <form className={styles.form} onSubmit={(e) => void handleSendOtp(e)}>
+          <form className={styles.form} noValidate onSubmit={(e) => void handleSendOtp(e)}>
             <label className={styles.label}>
               Local dev email
               <input
+                ref={emailInputRef}
                 type="email"
-                className={styles.input}
+                aria-invalid={Boolean(fieldErrors.email)}
+                aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
+                className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
                 placeholder="you@example.com"
                 value={email}
-                onChange={(e) => setEmail(e.currentTarget.value)}
+                onChange={(e) => {
+                  setEmail(e.currentTarget.value);
+                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                  if (errorMsg) setErrorMsg(null);
+                }}
+                onBlur={handleEmailBlur}
                 required
               />
+              {fieldErrors.email && (
+                <p id="login-email-error" className={styles.fieldError} role="alert">
+                  {fieldErrors.email}
+                </p>
+              )}
             </label>
+            {errorMsg && (
+              <div className={styles.errorBanner} role="alert">
+                <span>{errorMsg}</span>
+                <button
+                  type="button"
+                  className={styles.bannerClose}
+                  aria-label="Dismiss error"
+                  onClick={() => setErrorMsg(null)}
+                >
+                  <X size={15} />
+                </button>
+              </div>
+            )}
             <Button
               type="submit"
               fullWidth

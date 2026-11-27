@@ -3,7 +3,12 @@ import { NextResponse } from 'next/server';
 import { assertSafeBlobKey } from '@/lib/mvp/blob-store';
 import type { FeedItemKind } from '@/lib/mvp/constants';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
-import { addFeedItem, removeFeedItem, updateFeedItem } from '@/lib/mvp/workspace-store';
+import {
+  addFeedItem,
+  clearWorkspaceFeed,
+  removeFeedItem,
+  updateFeedItem,
+} from '@/lib/mvp/workspace-store';
 
 const VALID_KINDS = new Set<FeedItemKind>(['text', 'link', 'code', 'media', 'file']);
 
@@ -95,6 +100,14 @@ export async function DELETE(req: Request) {
     }
 
     const url = new URL(req.url);
+    if (url.searchParams.get('all') === 'true') {
+      const cleared = await clearWorkspaceFeed(session.workspaceId, session.deviceId);
+      if (!cleared) {
+        return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const id = url.searchParams.get('id') ?? '';
     if (!id) {
       return NextResponse.json({ error: 'Item ID is required.' }, { status: 400 });

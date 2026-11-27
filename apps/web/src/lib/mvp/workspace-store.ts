@@ -352,13 +352,6 @@ export async function addFeedItem(input: {
     return { ok: false, reason: 'file_too_large' };
   }
 
-  const state = await getWorkspaceState(input.workspaceId, input.deviceId);
-  if (!state) return { ok: false, reason: 'unauthorized' };
-
-  if (state.usedBytes + input.sizeBytes > state.workspace.storage_limit_bytes) {
-    return { ok: false, reason: 'storage_full' };
-  }
-
   const now = new Date();
   const isFileLike = input.kind === 'media' || input.kind === 'file';
   const expiresAt = isFileLike
@@ -380,6 +373,13 @@ export async function addFeedItem(input: {
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
+    const state = await getWorkspaceState(input.workspaceId, input.deviceId);
+    if (!state) return { ok: false, reason: 'unauthorized' };
+
+    if (state.usedBytes + input.sizeBytes > state.workspace.storage_limit_bytes) {
+      return { ok: false, reason: 'storage_full' };
+    }
+
     const { error } = await supabase.from('feed_items').insert(item);
     if (error) throw new Error(`Supabase item insert error: ${error.message}`);
     publishWorkspaceEvent(input.workspaceId);
@@ -388,6 +388,25 @@ export async function addFeedItem(input: {
 
   return withLocalLock(async () => {
     const data = await readLocalData();
+    const ws = data.workspaces.find((w) => w.id === input.workspaceId);
+    const dev = data.devices.find(
+      (d) => d.id === input.deviceId && d.workspace_id === input.workspaceId
+    );
+    if (!ws || !dev) return { ok: false, reason: 'unauthorized' };
+
+    const nowMs = Date.now();
+    const usedBytes = data.items
+      .filter(
+        (it) =>
+          it.workspace_id === input.workspaceId &&
+          (!it.expires_at || Date.parse(it.expires_at) > nowMs)
+      )
+      .reduce((acc, it) => acc + Number(it.size_bytes || 0), 0);
+
+    if (usedBytes + input.sizeBytes > ws.storage_limit_bytes) {
+      return { ok: false, reason: 'storage_full' };
+    }
+
     data.items.push(item);
     await writeLocalData(data);
     publishWorkspaceEvent(input.workspaceId);
@@ -484,19 +503,19 @@ export async function removeWorkspaceDevice(
   requesterDeviceId: string,
   targetDeviceId: string
 ): Promise<{ ok: true } | { ok: false; reason: 'unauthorized' | 'not_found' | 'last_device' }> {
-  const state = await getWorkspaceState(workspaceId, requesterDeviceId);
-  if (!state) return { ok: false, reason: 'unauthorized' };
-
-  if (!state.devices.some((d) => d.id === targetDeviceId)) {
-    return { ok: false, reason: 'not_found' };
-  }
-
-  if (state.devices.length <= 1) {
-    return { ok: false, reason: 'last_device' };
-  }
-
   const supabase = getSupabaseAdmin();
   if (supabase) {
+    const state = await getWorkspaceState(workspaceId, requesterDeviceId);
+    if (!state) return { ok: false, reason: 'unauthorized' };
+
+    if (!state.devices.some((d) => d.id === targetDeviceId)) {
+      return { ok: false, reason: 'not_found' };
+    }
+
+    if (state.devices.length <= 1) {
+      return { ok: false, reason: 'last_device' };
+    }
+
     const { error } = await supabase
       .from('workspace_devices')
       .delete()
@@ -509,6 +528,17 @@ export async function removeWorkspaceDevice(
 
   return withLocalLock(async () => {
     const data = await readLocalData();
+    const wsDevices = data.devices.filter((d) => d.workspace_id === workspaceId);
+    if (!wsDevices.some((d) => d.id === requesterDeviceId)) {
+      return { ok: false, reason: 'unauthorized' };
+    }
+    if (!wsDevices.some((d) => d.id === targetDeviceId)) {
+      return { ok: false, reason: 'not_found' };
+    }
+    if (wsDevices.length <= 1) {
+      return { ok: false, reason: 'last_device' };
+    }
+
     data.devices = data.devices.filter(
       (d) => !(d.id === targetDeviceId && d.workspace_id === workspaceId)
     );
@@ -556,5 +586,74 @@ export async function renameWorkspaceDevice(
     await writeLocalData(data);
     publishWorkspaceEvent(workspaceId);
     return { ok: true, label };
+  });
+}
+
+/** Delete all items and blobs in a workspace while keeping the workspace and paired devices. */
+export async function clearWorkspaceFeed(
+  workspaceId: string,
+  deviceId: string
+): Promise<boolean> {
+  const state = await getWorkspaceState(workspaceId, deviceId);
+  if (!state) return false;
+
+  for (const it of state.items) {
+    if (it.blob_key) {
+      void deleteBlob(it.blob_key).catch(() => undefined);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase.from('feed_items').delete().eq('workspace_id', workspaceId);
+    if (error) throw new Error(`Supabase clear feed error: ${error.message}`);
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.items = data.items.filter((it) => it.workspace_id !== workspaceId);
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  });
+}
+
+/** Permanently delete a workspace, all its items/blobs/devices, and optionally the Supabase Auth user. */
+export async function deleteWorkspaceAndAccount(
+  workspaceId: string,
+  deviceId: string,
+  userId?: string | null
+): Promise<boolean> {
+  const state = await getWorkspaceState(workspaceId, deviceId);
+  if (!state) return false;
+
+  for (const it of state.items) {
+    if (it.blob_key) {
+      await deleteBlob(it.blob_key).catch(() => undefined);
+    }
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase.from('workspaces').delete().eq('id', workspaceId);
+    if (error) throw new Error(`Supabase workspace delete error: ${error.message}`);
+    const uid = userId || state.workspace.user_id;
+    if (uid) {
+      await supabase.auth.admin.deleteUser(uid).catch(() => undefined);
+    }
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    data.items = data.items.filter((it) => it.workspace_id !== workspaceId);
+    data.devices = data.devices.filter((d) => d.workspace_id !== workspaceId);
+    data.workspaces = data.workspaces.filter((w) => w.id !== workspaceId);
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return true;
   });
 }

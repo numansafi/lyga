@@ -46,6 +46,8 @@ describe('mvp session & workspace-store', () => {
       pairDeviceByCode,
       getWorkspaceState,
       addFeedItem,
+      clearWorkspaceFeed,
+      deleteWorkspaceAndAccount,
       removeFeedItem,
       removeWorkspaceDevice,
       renameWorkspaceDevice,
@@ -155,5 +157,17 @@ describe('mvp session & workspace-store', () => {
       const cannotRemoveLast = await removeWorkspaceDevice(workspace.id, device.id, device.id);
       assert.deepEqual(cannotRemoveLast, { ok: false, reason: 'last_device' });
     }
+
+    // Clear feed removes items but keeps workspace + device
+    assert.equal(await clearWorkspaceFeed(workspace.id, 'bad-device'), false);
+    assert.equal(await clearWorkspaceFeed(workspace.id, device.id), true);
+    const afterClear = await getWorkspaceState(workspace.id, device.id);
+    assert.equal(afterClear?.items.length, 0);
+
+    // Delete workspace wipes workspace & devices
+    assert.equal(await deleteWorkspaceAndAccount(workspace.id, 'bad-device'), false);
+    assert.equal(await deleteWorkspaceAndAccount(workspace.id, device.id), true);
+    const afterWipe = await getWorkspaceState(workspace.id, device.id);
+    assert.equal(afterWipe, null);
   });
 });

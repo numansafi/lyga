@@ -5,8 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Loader } from '@mantine/core';
 import type { EmailOtpType } from '@supabase/supabase-js';
+import { AlertCircle, Check, Lock } from 'lucide-react';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
-import styles from '../../login/Login.module.css';
+import loginStyles from '../../login/Login.module.css';
+import styles from './Callback.module.css';
 
 export default function AuthCallbackPage() {
   const router = useRouter();
@@ -91,30 +93,63 @@ export default function AuthCallbackPage() {
   }, [router]);
 
   return (
-    <main className={styles.page}>
-      <div className={styles.card}>
+    <main className={loginStyles.page}>
+      <div className={styles.callbackCard}>
+        <div className={loginStyles.topRow}>
+          <Link href="/" className={loginStyles.brand}>
+            <svg width="24" height="24" viewBox="48 48 160 178" fill="none" aria-hidden="true">
+              <path
+                stroke="#5EEAD4"
+                strokeWidth="28"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M64 94L92 66v116h100l-28 28"
+              />
+            </svg>
+            <span>LYGA</span>
+          </Link>
+          <span className={loginStyles.e2eeBadge}>
+            <Lock size={11} aria-hidden="true" />
+            Encrypted
+          </span>
+        </div>
+
         {confirmedCrossDevice ? (
           <>
-            <h1 className={styles.title}>Email confirmed!</h1>
-            <p className={styles.subtitle}>
-              Log in here or on the device where you started.
-            </p>
-            <Button component={Link} href="/login" fullWidth color="spruce">
-              Log in →
+            <div className={styles.centerBlock}>
+              <div className={styles.checkBadge} aria-hidden="true">
+                <Check size={28} strokeWidth={2.4} />
+              </div>
+              <h1 className={loginStyles.title}>Email confirmed</h1>
+              <p className={styles.subtitle}>
+                Your account is verified and ready. Log in here, or close this tab and sign in on
+                the device where you started.
+              </p>
+            </div>
+            <Button component={Link} href="/login" fullWidth className={loginStyles.primaryBtn}>
+              Log in to Lyga →
             </Button>
+            <div className={styles.hintBox}>
+              Opened this link on your phone? You can head back to your computer and log in there.
+            </div>
           </>
         ) : errorMsg ? (
           <>
-            <h1 className={styles.title}>Sign-in failed</h1>
-            <p className={styles.subtitle}>{errorMsg}</p>
-            <Button component={Link} href="/login" fullWidth color="spruce">
-              Back to login
+            <div className={styles.centerBlock}>
+              <div className={styles.errorBadge} aria-hidden="true">
+                <AlertCircle size={26} strokeWidth={2.2} />
+              </div>
+              <h1 className={loginStyles.title}>Sign-in failed</h1>
+              <p className={styles.subtitle}>{errorMsg}</p>
+            </div>
+            <Button component={Link} href="/login" fullWidth className={loginStyles.primaryBtn}>
+              Back to login →
             </Button>
           </>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <div className={styles.loadingBlock}>
             <Loader color="spruce" size="md" />
-            <div style={{ fontSize: 14, color: '#ccfbf1' }}>Finishing sign-in…</div>
+            <div className={styles.loadingText}>Finishing sign-in…</div>
           </div>
         )}
       </div>

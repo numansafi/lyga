@@ -150,6 +150,13 @@
   display: none;
 }
 
+.headerActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .messageStream {
   flex: 1;
   min-height: 0;
@@ -631,6 +638,7 @@
 
 .composerInput {
   flex: 1;
+  min-width: 0;
   border: 0;
   background: transparent;
   resize: none;
@@ -642,6 +650,12 @@
   padding: 6px 4px;
   max-height: 140px;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.composerInput::-webkit-scrollbar {
+  display: none;
 }
 
 .composerInput::placeholder {
@@ -1221,6 +1235,114 @@
   border: 1px solid rgba(94, 234, 212, 0.28);
   border-radius: 7px;
   padding: 3px 8px;
+}
+
+.modalStack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modalConfirmCopy {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #cfe4e0;
+}
+
+.feedbackPills {
+  display: flex;
+  gap: 6px;
+}
+
+.feedbackPill {
+  appearance: none;
+  border: 1px solid #1c4742;
+  background: #0b2623;
+  color: #9fbab6;
+  border-radius: 999px;
+  padding: 5px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.feedbackPillActive {
+  background: rgba(94, 234, 212, 0.14);
+  border-color: rgba(94, 234, 212, 0.45);
+  color: #5eead4;
+}
+
+.modalTextarea,
+.modalInput {
+  width: 100%;
+  background: #071e1b;
+  border: 1px solid #1c4742;
+  border-radius: 10px;
+  padding: 10px 12px;
+  color: #f0fdfa;
+  font-family: inherit;
+  font-size: 13.5px;
+  resize: vertical;
+  outline: none;
+}
+
+.modalTextarea:focus,
+.modalInput:focus {
+  border-color: #2dd4bf;
+}
+
+.modalActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.secondaryBtn {
+  appearance: none;
+  border: 1px solid #1c4742;
+  background: #0b2623;
+  color: #cfe4e0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.primaryBtn {
+  appearance: none;
+  border: 0;
+  background: #2dd4bf;
+  color: #042220;
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.primaryBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dangerBtn {
+  appearance: none;
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  background: rgba(220, 38, 38, 0.22);
+  color: #fca5a5;
+  border-radius: 999px;
+  padding: 7px 15px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.dangerBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .accountPopHeader {
@@ -2096,16 +2218,17 @@
     scrollbar-width: none;
   }
 
-  .bubbleOut,
-  .bubbleIn {
-    max-width: 86%;
-    padding: 8px 11px;
-    border-radius: 15px;
-  }
-
   .bubbleCluster {
     flex-direction: column;
     gap: 5px;
+    max-width: 86%;
+  }
+
+  .bubbleOut,
+  .bubbleIn {
+    max-width: 100%;
+    padding: 8px 11px;
+    border-radius: 15px;
   }
 
   .msgOut .bubbleCluster {
@@ -2139,7 +2262,53 @@
   }
 
   .chatHeader {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px 12px;
     padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  }
+
+  .chatIdentity {
+    grid-column: 1;
+    grid-row: 1;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .chatIdentityText {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .headerRight {
+    display: contents;
+  }
+
+  .headerActions {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+
+  .filterStrip {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    width: 100%;
+    min-width: 0;
+    justify-content: space-between;
+    overflow-x: auto;
+    scrollbar-width: none;
+    white-space: nowrap;
+  }
+
+  .filterStrip::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filterBtn {
+    flex: 1 0 auto;
+    justify-content: center;
   }
 
   .composerDock {
@@ -2175,26 +2344,58 @@
   }
 }
 
+@media (max-width: 1120px) and (min-width: 921px) {
+  .appShell {
+    grid-template-columns: minmax(0, 1fr) 290px;
+  }
+}
+
 @media (max-width: 640px) {
-  .headerRight {
-    width: 100%;
-    flex-wrap: nowrap;
+  .chatHeader {
+    gap: 10px 8px;
   }
 
-  .filterStrip {
-    flex: 1;
-    min-width: 0;
-    overflow-x: auto;
-    scrollbar-width: none;
-    white-space: nowrap;
+  .chatIdentity {
+    gap: 10px;
   }
 
-  .filterStrip::-webkit-scrollbar {
+  .hideMobile {
     display: none;
   }
 
-  .filterBtn {
+  .chatSubEncryptedWord {
+    text-transform: capitalize;
+  }
+
+  .chatAvatar {
+    width: 34px;
+    height: 34px;
+  }
+
+  .chatSub {
+    display: flex;
+    min-width: 0;
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .chatSubEncrypted {
     flex-shrink: 0;
+  }
+
+  .filterBtn {
+    padding: 5px 8px;
+    font-size: 12px;
+    gap: 4px;
+  }
+
+  .dayPill {
+    padding: 4px 10px;
+    font-size: 10.5px;
+    gap: 5px;
   }
 }
 
@@ -2935,4 +3136,95 @@
 .signOutBtn:hover {
   border-color: #f87171;
   color: #fca5a5;
+}
+
+.toastAnchor {
+  position: relative;
+  height: 0;
+  display: flex;
+  justify-content: center;
+  z-index: 35;
+  pointer-events: none;
+}
+
+.floatingToast {
+  position: absolute;
+  top: 12px;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(520px, calc(100% - 28px));
+  padding: 10px 14px;
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.48);
+  animation: toastSlideIn 160ms ease-out;
+}
+
+.floatingToastInfo {
+  background: rgba(7, 36, 33, 0.94);
+  border: 1px solid rgba(94, 234, 212, 0.36);
+  color: #ccfbf1;
+}
+
+.floatingToastError {
+  background: rgba(42, 16, 18, 0.94);
+  border: 1px solid rgba(248, 113, 113, 0.42);
+  color: #fecaca;
+}
+
+.floatingToastIconInfo {
+  color: #5eead4;
+  flex-shrink: 0;
+}
+
+.floatingToastIconError {
+  color: #f87171;
+  flex-shrink: 0;
+}
+
+.floatingToastClose {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.72;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  margin-left: 2px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: opacity 140ms ease-out, background-color 140ms ease-out;
+}
+
+.floatingToastClose:hover {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.accountDangerLabel {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: rgba(248, 113, 113, 0.72);
+  padding: 4px 10px 2px;
 }
