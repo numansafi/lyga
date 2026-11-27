@@ -5,7 +5,8 @@
     "dev": "pnpm --filter @lyga/web dev",
     "build": "pnpm --filter @lyga/web build",
     "typecheck": "pnpm -r typecheck",
-    "test": "pnpm -r test"
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @lyga/web test:e2e"
   },
   "devDependencies": {
     "typescript": "^5.8.2"

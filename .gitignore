@@ -9,3 +9,5 @@ dist/
 .vercel
 *.tsbuildinfo
 .impeccable/
+test-results/
+playwright-report/

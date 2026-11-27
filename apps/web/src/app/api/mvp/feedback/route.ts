@@ -43,31 +43,46 @@ export async function POST(req: Request) {
       id: crypto.randomUUID(),
       category,
       message,
-      email: auth?.email ?? null,
+      userId: auth?.userId ?? null,
+      email: auth?.email?.toLowerCase() ?? null,
       workspaceId: session?.workspaceId ?? null,
       createdAt: new Date().toISOString(),
     };
 
     const supabase = getSupabaseAdmin();
-    if (supabase && auth?.email) {
-      const email = auth.email.toLowerCase();
-      after(async () => {
-        await supabase
-          .from('waitlist')
-          .update({ pain_note: `[${category}] ${message.slice(0, 500)}` })
-          .eq('email', email)
-          .then(() => undefined, () => undefined);
+    if (supabase) {
+      const { error: insertErr } = await supabase.from('feedback').insert({
+        id: entry.id,
+        category: entry.category,
+        message: entry.message,
+        user_id: entry.userId,
+        email: entry.email,
+        workspace_id: entry.workspaceId,
+        created_at: entry.createdAt,
       });
-    }
+      if (insertErr && insertErr.code !== 'PGRST205') {
+        throw new Error(`Supabase feedback insert error: ${insertErr.message}`);
+      }
+      if (insertErr?.code === 'PGRST205') {
+        console.warn('[mvp feedback] public.feedback table not found; run supabase/migrations/0004_feedback.sql');
+      }
 
-    if (process.env.NODE_ENV !== 'production') {
+      if (entry.email) {
+        const email = entry.email;
+        after(async () => {
+          await supabase
+            .from('waitlist')
+            .update({ pain_note: `[${category}] ${message.slice(0, 500)}` })
+            .eq('email', email)
+            .then(() => undefined, () => undefined);
+        });
+      }
+    } else {
       await localFeedbackStore.withLock(async () => {
         const existing = await localFeedbackStore.read();
         existing.push(entry);
         await localFeedbackStore.write(existing);
       });
-    } else {
-      console.info('[mvp feedback]', JSON.stringify(entry));
     }
 
     return NextResponse.json({ ok: true });
