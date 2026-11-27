@@ -517,3 +517,44 @@ export async function removeWorkspaceDevice(
     return { ok: true };
   });
 }
+
+export async function renameWorkspaceDevice(
+  workspaceId: string,
+  requesterDeviceId: string,
+  targetDeviceId: string,
+  rawLabel: string
+): Promise<{ ok: true; label: string } | { ok: false; reason: 'unauthorized' | 'not_found' | 'invalid' }> {
+  const label = rawLabel.trim().slice(0, 32);
+  if (!label) return { ok: false, reason: 'invalid' };
+
+  const state = await getWorkspaceState(workspaceId, requesterDeviceId);
+  if (!state) return { ok: false, reason: 'unauthorized' };
+
+  if (!state.devices.some((d) => d.id === targetDeviceId)) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { error } = await supabase
+      .from('workspace_devices')
+      .update({ label })
+      .eq('id', targetDeviceId)
+      .eq('workspace_id', workspaceId);
+    if (error) throw new Error(`Supabase device rename error: ${error.message}`);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true, label };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const target = data.devices.find(
+      (d) => d.id === targetDeviceId && d.workspace_id === workspaceId
+    );
+    if (!target) return { ok: false, reason: 'not_found' as const };
+    target.label = label;
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true, label };
+  });
+}

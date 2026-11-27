@@ -8,7 +8,6 @@ import {
   ArrowDownToLine,
   Camera,
   Check,
-  CheckSquare,
   ChevronLeft,
   ChevronRight,
   ClipboardPaste,
@@ -19,11 +18,13 @@ import {
   FileArchive,
   FileText,
   Image as ImageIcon,
+  Keyboard,
   LayoutGrid,
   Link2,
   List,
   Lock,
   LogOut,
+  Minus,
   Pencil,
   Pin,
   Plus,
@@ -31,7 +32,7 @@ import {
   Search,
   Send,
   ShieldCheck,
-  Square,
+  Sparkles,
   StickyNote,
   Trash2,
   UploadCloud,
@@ -103,7 +104,7 @@ function getFileExtension(fileName?: string): string {
 
 type PreviewKind = 'image' | 'video' | 'pdf' | 'text' | null;
 
-const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif']);
+const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'heif']);
 const VIDEO_EXTS = new Set(['mp4', 'mov', 'webm', 'm4v']);
 const TEXT_EXTS = new Set(['txt', 'md', 'json', 'csv', 'log', 'ts', 'tsx', 'js', 'jsx', 'py', 'css', 'html', 'yml', 'yaml', 'xml']);
 
@@ -236,15 +237,15 @@ export default function WorkspacePage() {
   const [recoveryCopied, setRecoveryCopied] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
   const [mediaView, setMediaView] = useState<'grid' | 'list'>('grid');
-  const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [editingItem, setEditingItem] = useState<DecryptedFeedItem | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [savingEdit, setSavingEdit] = useState(false);
   const [attachMenuOpen, setAttachMenuOpen] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [showQr, setShowQr] = useState(false);
+  const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -391,7 +392,6 @@ export default function WorkspacePage() {
   );
 
   useEffect(() => {
-    setSelectMode(false);
     setSelectedIds([]);
     setAttachMenuOpen(false);
   }, [filter]);
@@ -438,14 +438,6 @@ export default function WorkspacePage() {
     el.style.height = 'auto';
     el.style.height = `${Math.min(140, el.scrollHeight)}px`;
   }, [draft]);
-
-  useEffect(() => {
-    const mq = window.matchMedia?.('(pointer: coarse)');
-    const syncPointer = () => setIsTouchDevice(mq?.matches ?? false);
-    syncPointer();
-    mq?.addEventListener?.('change', syncPointer);
-    return () => mq?.removeEventListener?.('change', syncPointer);
-  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -801,7 +793,23 @@ export default function WorkspacePage() {
             encBuf,
             item.meta.mimeType || 'application/octet-stream'
           );
-          const objectUrl = URL.createObjectURL(plainBlob);
+          const ext = getFileExtension(item.meta.fileName || item.meta.title);
+          const mime = (item.meta.mimeType ?? '').toLowerCase();
+          let displayBlob = plainBlob;
+          if (ext === 'heic' || ext === 'heif' || mime === 'image/heic' || mime === 'image/heif') {
+            try {
+              const heic2any = (await import('heic2any')).default;
+              const converted = await heic2any({
+                blob: plainBlob,
+                toType: 'image/jpeg',
+                quality: 0.9,
+              });
+              displayBlob = Array.isArray(converted) ? converted[0] : converted;
+            } catch {
+              // Fall back to raw blob (works natively on Safari)
+            }
+          }
+          const objectUrl = URL.createObjectURL(displayBlob);
           previewUrlsRef.current[item.raw.id] = objectUrl;
           setPreviewUrls((curr) => ({ ...curr, [item.raw.id]: objectUrl }));
           return objectUrl;
@@ -1019,9 +1027,8 @@ export default function WorkspacePage() {
 
   const handleBulkDelete = async () => {
     if (selectedIds.length === 0) return;
-    const targets = [...selectedIds];
+    const targets = Array.from(new Set(selectedIds));
     setSelectedIds([]);
-    setSelectMode(false);
     await Promise.all(targets.map((id) => handleDelete(id)));
   };
 
@@ -1033,7 +1040,6 @@ export default function WorkspacePage() {
       await handleDownload(it);
     }
     setSelectedIds([]);
-    setSelectMode(false);
   };
 
   const handleDelete = async (id: string) => {
@@ -1296,26 +1302,55 @@ export default function WorkspacePage() {
 
   const accountInitial = (userEmail?.trim()?.[0] || 'L').toUpperCase();
 
-  const renderAccountMenu = (menuRef: React.RefObject<HTMLDivElement | null>) => (
+  const renderAccountMenu = (
+    menuRef: React.RefObject<HTMLDivElement | null>,
+    showLabel = false
+  ) => (
     <div className={styles.accountMenuWrap} ref={menuRef}>
       <button
         type="button"
-        className={styles.avatarSquircle}
+        className={showLabel ? styles.accountTriggerBtn : styles.avatarSquircle}
         aria-label="Account menu"
         aria-expanded={accountMenuOpen}
         aria-haspopup="menu"
         onClick={() => setAccountMenuOpen((prev) => !prev)}
       >
-        <span>{accountInitial}</span>
+        <span className={showLabel ? styles.avatarSquircleInner : undefined}>{accountInitial}</span>
+        {showLabel && (
+          <span className={styles.accountTriggerMeta}>
+            <span className={styles.accountTriggerName}>{userEmail ?? 'Account'}</span>
+            <span className={styles.accountTriggerPlan}>Free plan</span>
+          </span>
+        )}
       </button>
 
       {accountMenuOpen && (
-        <div className={styles.accountPopover} role="menu" aria-label="Account">
+        <div
+          className={`${styles.accountPopover} ${showLabel ? styles.accountPopoverLeft : ''}`}
+          role="menu"
+          aria-label="Account"
+        >
           <div className={styles.accountPopHeader}>
-            <span className={styles.accountPopEmail}>{userEmail ?? 'Signed in'}</span>
-            <span className={styles.accountPlanPill}>Free plan</span>
+            <span className={styles.accountPopEmail}>
+              {showLabel ? 'End-to-end encrypted' : userEmail ?? 'Signed in'}
+            </span>
+            <span className={styles.accountPlanPill}>
+              {showLabel ? 'AES-GCM' : 'Free plan'}
+            </span>
           </div>
           <div className={styles.railHairline} />
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setQrModalOpen(true);
+            }}
+          >
+            <QrCode size={13} aria-hidden="true" />
+            <span>Pair another device</span>
+          </button>
           <button
             type="button"
             role="menuitem"
@@ -1329,6 +1364,30 @@ export default function WorkspacePage() {
           >
             {recoveryCopied ? <Check size={13} /> : <ShieldCheck size={13} />}
             <span>{recoveryCopied ? 'Recovery link copied' : 'Copy backup recovery link'}</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setShortcutsOpen(true);
+            }}
+          >
+            <Keyboard size={13} aria-hidden="true" />
+            <span>Keyboard shortcuts</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.');
+            }}
+          >
+            <Sparkles size={13} aria-hidden="true" style={{ color: '#5eead4' }} />
+            <span style={{ color: '#5eead4' }}>Upgrade to Pro · £5/mo →</span>
           </button>
           <button
             type="button"
@@ -1351,10 +1410,13 @@ export default function WorkspacePage() {
     </div>
   );
 
-  const renderPinnedSection = () => (
-    <div className={`${styles.railSection} ${styles.pinnedSection}`}>
+  const renderPinnedSection = (showTitle = true) => (
+    <div
+      className={`${styles.railSection} ${styles.pinnedSection}`}
+      style={showTitle ? undefined : { paddingTop: 2 }}
+    >
       <div className={styles.sectionHeaderRow}>
-        <span className={styles.sectionTitle}>Pinned</span>
+        {showTitle && <span className={styles.sectionTitle}>Pinned</span>}
         <span className={styles.sectionMuted}>
           {pinnedItems.length} {pinnedItems.length === 1 ? 'item' : 'items'}
         </span>
@@ -1414,9 +1476,19 @@ export default function WorkspacePage() {
   const renderDeviceCard = () => (
     <div className={styles.railSection}>
       <div className={styles.deviceRow}>
-        <span className={styles.sectionTitle}>
-          Devices ({devices.length} of {workspace?.max_devices ?? 2})
-        </span>
+        <button
+          type="button"
+          className={`${styles.syncStatusPill} ${devices.length < 2 ? styles.syncStatusSingle : ''}`}
+          onClick={() => {
+            if (devices.length < 2) setShowQr((prev) => !prev);
+          }}
+          title={devices.length >= 2 ? 'End-to-end encrypted sync active' : 'Click to show QR code'}
+        >
+          <span className={styles.syncStatusDot} aria-hidden="true" />
+          <span>
+            {devices.length >= 2 ? `${devices.length} devices connected` : '1 device · Pair another'}
+          </span>
+        </button>
         <div className={styles.deviceActions}>
           <button
             type="button"
@@ -1433,8 +1505,17 @@ export default function WorkspacePage() {
           className={styles.deviceEditRow}
           onSubmit={(e) => {
             e.preventDefault();
-            setMyDeviceName(saveDeviceName(deviceId, nameDraft));
+            const saved = saveDeviceName(deviceId, nameDraft);
+            setMyDeviceName(saved);
+            setDevices((prev) =>
+              prev.map((d) => (d.id === deviceId ? { ...d, label: saved } : d))
+            );
             setEditingName(false);
+            void fetch('/api/mvp/devices', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: deviceId, label: saved }),
+            }).catch(() => undefined);
           }}
         >
           <input
@@ -1511,7 +1592,7 @@ export default function WorkspacePage() {
   const renderStorageCard = () => (
     <div className={styles.railSection}>
       <div className={styles.storageRow}>
-        <span>Encrypted Vault</span>
+        <span>Storage</span>
         <span>{formatBytes(usedBytes)} / {formatBytes(FREE_MAX_STORAGE_BYTES)}</span>
       </div>
       <div className={styles.vaultBarTrack} aria-hidden="true">
@@ -1577,16 +1658,9 @@ export default function WorkspacePage() {
       </div>
       <div className={styles.vaultDivider} />
       <div className={styles.vaultMetaRow}>
-        <span>Auto-expiry</span>
-        <span>{FREE_EXPIRY_DAYS} days (Free)</span>
+        <span>Auto-delete: After {FREE_EXPIRY_DAYS} days</span>
+        <span>Max 500 MB / file</span>
       </div>
-      <button
-        type="button"
-        className={styles.upgradeLink}
-        onClick={() => setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.')}
-      >
-        Lock in 100 GB &amp; 5 GB files (£5/mo) →
-      </button>
     </div>
   );
 
@@ -1700,7 +1774,15 @@ export default function WorkspacePage() {
     </div>
         </header>
 
-        <div ref={streamRef} className={styles.messageStream}>
+        <div
+          ref={streamRef}
+          className={styles.messageStream}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setSelectedBubbleId(null);
+            }
+          }}
+        >
           {filter !== 'all' ? (
             <div className={styles.categoryView}>
               <div className={styles.categoryToolbar}>
@@ -1727,6 +1809,47 @@ export default function WorkspacePage() {
 
                 <div className={styles.toolbarFilters}>
                   <div className={styles.deviceFilterRow} role="group" aria-label="Filter by device">
+                    {(() => {
+                      const visibleIds = Array.from(
+                        new Set(categoryGroups.flatMap((g) => g.items.map((it) => it.raw.id)))
+                      );
+                      const allSelected =
+                        visibleIds.length > 0 && visibleIds.every((id) => selectedIds.includes(id));
+                      const someSelected =
+                        !allSelected && visibleIds.some((id) => selectedIds.includes(id));
+                      return (
+                        <button
+                          type="button"
+                          className={`${styles.masterCheckPill} ${
+                            allSelected || someSelected ? styles.masterCheckPillActive : ''
+                          }`}
+                          aria-label={allSelected ? 'Deselect all items' : 'Select all items'}
+                          aria-pressed={allSelected}
+                          disabled={visibleIds.length === 0}
+                          onClick={() => {
+                            if (allSelected) {
+                              setSelectedIds([]);
+                            } else {
+                              setSelectedIds(visibleIds);
+                            }
+                          }}
+                        >
+                          <span
+                            className={`${styles.itemCheckbox} ${
+                              allSelected ? styles.itemCheckboxChecked : ''
+                            } ${someSelected ? styles.itemCheckboxIndeterminate : ''}`}
+                            aria-hidden="true"
+                          >
+                            {allSelected ? (
+                              <Check size={11} strokeWidth={3} />
+                            ) : someSelected ? (
+                              <Minus size={11} strokeWidth={3} />
+                            ) : null}
+                          </span>
+                          <span>{someSelected ? `${selectedIds.length}` : 'All'}</span>
+                        </button>
+                      );
+                    })()}
                     <button
                       type="button"
                       className={`${styles.devicePill} ${
@@ -1775,30 +1898,33 @@ export default function WorkspacePage() {
                       </button>
                     ))}
                     {filter === 'media' && (
-                      <button
-                        type="button"
-                        className={`${styles.sortBtn} ${mediaView === 'grid' ? styles.sortBtnActive : ''}`}
-                        aria-label={mediaView === 'grid' ? 'Switch to list view' : 'Switch to grid view'}
-                        onClick={() => setMediaView((v) => (v === 'grid' ? 'list' : 'grid'))}
-                      >
-                        {mediaView === 'grid' ? <LayoutGrid size={13} /> : <List size={13} />}
-                      </button>
+                      <div className={styles.viewSwitchGroup} role="group" aria-label="Media layout">
+                        <button
+                          type="button"
+                          className={`${styles.viewSwitchBtn} ${mediaView === 'grid' ? styles.viewSwitchBtnActive : ''}`}
+                          aria-label="Grid view"
+                          aria-pressed={mediaView === 'grid'}
+                          title="Grid view"
+                          onClick={() => setMediaView('grid')}
+                        >
+                          <LayoutGrid size={13} />
+                        </button>
+                        <button
+                          type="button"
+                          className={`${styles.viewSwitchBtn} ${mediaView === 'list' ? styles.viewSwitchBtnActive : ''}`}
+                          aria-label="List view"
+                          aria-pressed={mediaView === 'list'}
+                          title="List view"
+                          onClick={() => setMediaView('list')}
+                        >
+                          <List size={13} />
+                        </button>
+                      </div>
                     )}
-                    <button
-                      type="button"
-                      className={`${styles.sortBtn} ${selectMode ? styles.sortBtnActive : ''}`}
-                      onClick={() => {
-                        setSelectMode((v) => !v);
-                        setSelectedIds([]);
-                      }}
-                    >
-                      <CheckSquare size={13} />
-                      <span>Select</span>
-                    </button>
     </div>
     </div>
 
-                {selectMode && (
+                {selectedIds.length > 0 && (
                   <div className={styles.bulkBar}>
                     <span className={styles.bulkCount}>{selectedIds.length} selected</span>
                     <div className={styles.bulkActions}>
@@ -1806,7 +1932,6 @@ export default function WorkspacePage() {
                         <button
                           type="button"
                           className={styles.previewBtn}
-                          disabled={selectedIds.length === 0}
                           onClick={() => void handleBulkDownload()}
                         >
                           <ArrowDownToLine size={13} />
@@ -1816,11 +1941,19 @@ export default function WorkspacePage() {
                       <button
                         type="button"
                         className={styles.bulkDeleteBtn}
-                        disabled={selectedIds.length === 0}
                         onClick={() => void handleBulkDelete()}
                       >
                         <Trash2 size={13} />
                         <span>Delete</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.actionIconBtn}
+                        aria-label="Clear selection"
+                        title="Clear selection"
+                        onClick={() => setSelectedIds([])}
+                      >
+                        <X size={13} />
                       </button>
     </div>
     </div>
@@ -1861,10 +1994,27 @@ export default function WorkspacePage() {
                             >
                               <button
                                 type="button"
+                                className={`${styles.tileCheckBtn} ${isSelected ? styles.tileCheckBtnSelected : ''}`}
+                                aria-label={isSelected ? `Deselect ${item.meta.fileName || item.meta.title}` : `Select ${item.meta.fileName || item.meta.title}`}
+                                aria-pressed={isSelected}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelect(item.raw.id);
+                                }}
+                              >
+                                <span
+                                  className={`${styles.itemCheckbox} ${styles.itemCheckboxRound} ${
+                                    isSelected ? styles.itemCheckboxChecked : ''
+                                  }`}
+                                  aria-hidden="true"
+                                >
+                                  {isSelected ? <Check size={11} strokeWidth={3} /> : null}
+                                </span>
+                              </button>
+                              <button
+                                type="button"
                                 className={styles.mediaTilePreview}
-                                onClick={() =>
-                                  selectMode ? toggleSelect(item.raw.id) : void handlePreview(item)
-                                }
+                                onClick={() => void handlePreview(item)}
                               >
                                 {thumbUrl ? (
                                   <img
@@ -1883,35 +2033,22 @@ export default function WorkspacePage() {
                                   {item.meta.fileName || item.meta.title}
                                 </span>
                                 <div className={styles.mediaTileBtns}>
-                                  {selectMode ? (
-                                    <button
-                                      type="button"
-                                      className={styles.actionIconBtn}
-                                      aria-label="Select item"
-                                      onClick={() => toggleSelect(item.raw.id)}
-                                    >
-                                      {isSelected ? <CheckSquare size={14} /> : <Square size={14} />}
-                                    </button>
-                                  ) : (
-                                    <>
-                                      <button
-                                        type="button"
-                                        className={`${styles.actionIconBtn} ${isPinned ? styles.pinActiveBtn : ''}`}
-                                        aria-label={isPinned ? 'Unpin' : 'Pin'}
-                                        onClick={() => togglePin(item.raw.id)}
-                                      >
-                                        <Pin size={13} />
-                                      </button>
-                                      <button
-                                        type="button"
-                                        className={styles.actionIconBtn}
-                                        aria-label="Save"
-                                        onClick={() => void handleDownload(item)}
-                                      >
-                                        <ArrowDownToLine size={13} />
-                                      </button>
-                                    </>
-                                  )}
+                                  <button
+                                    type="button"
+                                    className={`${styles.actionIconBtn} ${isPinned ? styles.pinActiveBtn : ''}`}
+                                    aria-label={isPinned ? 'Unpin' : 'Pin'}
+                                    onClick={() => togglePin(item.raw.id)}
+                                  >
+                                    <Pin size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={styles.actionIconBtn}
+                                    aria-label="Save"
+                                    onClick={() => void handleDownload(item)}
+                                  >
+                                    <ArrowDownToLine size={13} />
+                                  </button>
     </div>
     </div>
     </div>
@@ -1929,7 +2066,10 @@ export default function WorkspacePage() {
                         const senderOpt = deviceOptions.find((d) => d.id === senderId);
                         const senderName = isSelf
                           ? myDeviceName
-                          : item.meta.senderLabel || senderOpt?.label || 'Paired device';
+                          : devices.find((d) => d.id === senderId)?.label ||
+                            item.meta.senderLabel ||
+                            senderOpt?.label ||
+                            'Paired device';
                         const dotColor = senderOpt?.dotColor ?? '#7dd3fc';
                         const copyValue = item.bodyText ?? item.meta.title;
                         const ext = getFileExtension(item.meta.fileName || item.meta.title);
@@ -1941,18 +2081,30 @@ export default function WorkspacePage() {
                         const isSelected = selectedIds.includes(item.raw.id);
 
                         return (
-                          <div key={item.raw.id} className={styles.groupRow}>
+                          <div
+                            key={item.raw.id}
+                            className={`${styles.groupRow} ${isSelected ? styles.groupRowSelected : ''}`}
+                          >
                             <div className={styles.groupRowLeft}>
-                              {selectMode && (
-                                <button
-                                  type="button"
-                                  className={styles.actionIconBtn}
-                                  aria-label="Select item"
-                                  onClick={() => toggleSelect(item.raw.id)}
+                              <button
+                                type="button"
+                                className={styles.rowCheckBtn}
+                                aria-label={isSelected ? `Deselect ${item.meta.title || 'item'}` : `Select ${item.meta.title || 'item'}`}
+                                aria-pressed={isSelected}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleSelect(item.raw.id);
+                                }}
+                              >
+                                <span
+                                  className={`${styles.itemCheckbox} ${
+                                    isSelected ? styles.itemCheckboxChecked : ''
+                                  }`}
+                                  aria-hidden="true"
                                 >
-                                  {isSelected ? <CheckSquare size={15} /> : <Square size={15} />}
-                                </button>
-                              )}
+                                  {isSelected ? <Check size={11} strokeWidth={3} /> : null}
+                                </span>
+                              </button>
                               {isFile ? (
                                 thumbUrl ? (
                                   <button
@@ -2237,18 +2389,31 @@ export default function WorkspacePage() {
                       ? (peerColorMap.get(item.meta.senderDeviceId) ?? styles.peer0)
                       : styles.peer0;
                   const senderName =
-                    item.meta.senderLabel ||
                     devices.find((d) => d.id === item.meta.senderDeviceId)?.label ||
+                    item.meta.senderLabel ||
                     'Paired device';
+
+                  const isSelected = selectedBubbleId === item.raw.id;
 
                   return (
                     <div
                       key={item.raw.id}
-                      className={`${styles.msgRow} ${isSelf ? styles.msgOut : styles.msgIn}`}
+                      className={`${styles.msgRow} ${isSelf ? styles.msgOut : styles.msgIn} ${isSelected ? styles.msgSelected : ''}`}
                     >
-                      {isSelf && actions}
+                      <div className={styles.bubbleCluster}>
+                        {isSelf && actions}
 
-                      <div className={isSelf ? styles.bubbleOut : `${styles.bubbleIn} ${peerClass}`}>
+                        <div
+                          className={isSelf ? styles.bubbleOut : `${styles.bubbleIn} ${peerClass}`}
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest('button, a, input, textarea')) {
+                              return;
+                            }
+                            setSelectedBubbleId((curr) =>
+                              curr === item.raw.id ? null : item.raw.id
+                            );
+                          }}
+                        >
                         {!isSelf && <div className={styles.senderCaption}>{senderName}</div>}
 
                         {kind === 'link' &&
@@ -2323,7 +2488,8 @@ export default function WorkspacePage() {
 
                         {isFile &&
                           (() => {
-                            const ext = getFileExtension(item.meta.fileName || item.meta.title);
+                            const fileName = item.meta.fileName || item.meta.title;
+                            const ext = getFileExtension(fileName);
                             const isDownloading = downloadingId === item.raw.id;
                             const pKind = getPreviewKind(item);
                             return (
@@ -2332,40 +2498,44 @@ export default function WorkspacePage() {
                                   <DarkFileBadge ext={ext} />
     </div>
                                 <div className={styles.attachmentMeta}>
-                                  <div className={styles.attachmentName}>
-                                    {item.meta.fileName || item.meta.title}
+                                  <div className={styles.attachmentName} title={fileName}>
+                                    {fileName}
     </div>
                                   <div className={styles.attachmentSub}>
-                                    {formatBytes(item.raw.size_bytes)} · Original quality · {FREE_EXPIRY_DAYS}d
+                                    {formatBytes(item.raw.size_bytes)} · {FREE_EXPIRY_DAYS}d left
     </div>
     </div>
-                                {pKind && (
+                                <div className={styles.bubbleIconRow}>
+                                  {pKind && (
+                                    <button
+                                      type="button"
+                                      className={styles.bubbleIconBtn}
+                                      title="Preview"
+                                      aria-label={`Preview ${fileName}`}
+                                      onClick={() => void handlePreview(item)}
+                                    >
+                                      <Eye size={15} aria-hidden="true" />
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    className={styles.previewBtn}
-                                    aria-label={`Preview ${item.meta.fileName || item.meta.title}`}
-                                    onClick={() => void handlePreview(item)}
+                                    className={`${styles.bubbleIconBtn} ${styles.bubbleIconBtnPrimary}`}
+                                    title={isDownloading ? 'Saving…' : 'Save'}
+                                    aria-label={isDownloading ? `Saving ${fileName}` : `Save ${fileName}`}
+                                    disabled={isDownloading}
+                                    onClick={() => void handleDownload(item)}
                                   >
-                                    <Eye size={14} aria-hidden="true" />
+                                    {isDownloading ? (
+                                      <Loader size={13} color="currentColor" />
+                                    ) : (
+                                      <ArrowDownToLine
+                                        size={15}
+                                        strokeWidth={2.2}
+                                        aria-hidden="true"
+                                      />
+                                    )}
                                   </button>
-                                )}
-                                <button
-                                  type="button"
-                                  className={isSelf ? styles.saveBtnOut : styles.saveBtnIn}
-                                  disabled={isDownloading}
-                                  onClick={() => void handleDownload(item)}
-                                >
-                                  {isDownloading ? (
-                                    <Loader size={12} color="currentColor" />
-                                  ) : (
-                                    <ArrowDownToLine
-                                      size={14}
-                                      strokeWidth={2.2}
-                                      aria-hidden="true"
-                                    />
-                                  )}
-                                  <span>{isDownloading ? 'Saving…' : 'Save'}</span>
-                                </button>
+                                </div>
     </div>
                             );
                           })()}
@@ -2376,6 +2546,7 @@ export default function WorkspacePage() {
     </div>
 
                       {!isSelf && actions}
+                      </div>
     </div>
                   );
                 })
@@ -2467,7 +2638,7 @@ export default function WorkspacePage() {
             {filter === 'all' ? (
               <div className={styles.composerBar}>
                 <div className={styles.attachMenuWrap} ref={attachMenuWrapRef}>
-                  {!isTouchDevice && attachMenuOpen && (
+                  {attachMenuOpen && (
                     <div
                       className={styles.attachPopover}
                       role="menu"
@@ -2529,36 +2700,20 @@ export default function WorkspacePage() {
                       </button>
                     </div>
                   )}
-                  {isTouchDevice ? (
-                    <>
-                      <span className={styles.attachBtn} aria-hidden="true">
-                        <Plus size={18} />
-                      </span>
-                      <input
-                        type="file"
-                        multiple
-                        aria-label="Attach photos, videos, or files"
-                        className={styles.attachNativeOverlay}
-                        disabled={sending}
-                        onChange={(e) => {
-                          void handleSendFiles(e.currentTarget.files);
-                          e.currentTarget.value = '';
-                        }}
-                      />
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      className={`${styles.attachBtn} ${attachMenuOpen ? styles.attachBtnOpen : ''}`}
-                      aria-label={attachMenuOpen ? 'Close attachment menu' : 'Open attachment menu'}
-                      aria-expanded={attachMenuOpen}
-                      aria-haspopup="menu"
-                      disabled={sending}
-                      onClick={() => setAttachMenuOpen((prev) => !prev)}
-                    >
-                      <Plus size={18} />
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    className={`${styles.attachBtn} ${attachMenuOpen ? styles.attachBtnOpen : ''}`}
+                    aria-label={attachMenuOpen ? 'Close attachment menu' : 'Open attachment menu'}
+                    aria-expanded={attachMenuOpen}
+                    aria-haspopup="menu"
+                    disabled={sending}
+                    onClick={() => {
+                      textareaRef.current?.blur();
+                      setAttachMenuOpen((prev) => !prev);
+                    }}
+                  >
+                    <Plus size={18} />
+                  </button>
                 </div>
 
                 <textarea
@@ -2624,12 +2779,11 @@ export default function WorkspacePage() {
 
       <aside className={styles.rail} aria-label="Workspace devices and pairing">
         <div className={styles.railHeaderBar}>
-          <span className={styles.railHeaderTitle}>Workspace</span>
-          {renderAccountMenu(accountMenuDesktopRef)}
+          {renderAccountMenu(accountMenuDesktopRef, true)}
         </div>
-        {renderStorageCard()}
-        <div className={styles.railHairline} />
         {renderPinnedSection()}
+        <div className={styles.railHairline} />
+        {renderStorageCard()}
         <div className={styles.railHairline} />
         {renderDeviceCard()}
       </aside>
@@ -2654,6 +2808,43 @@ export default function WorkspacePage() {
           <div className={styles.railHairline} />
           {renderDeviceCard()}
     </div>
+      </Modal>
+
+      <Modal
+        opened={shortcutsOpen}
+        onClose={() => setShortcutsOpen(false)}
+        title="Keyboard shortcuts & tips"
+        centered
+        classNames={{
+          content: styles.darkModalContent,
+          header: styles.darkModalHeader,
+          title: styles.darkModalTitle,
+          close: styles.darkModalClose,
+          body: styles.darkModalBody,
+        }}
+      >
+        <div className={styles.shortcutsList}>
+          <div className={styles.shortcutRow}>
+            <span>Paste text, links, or screenshots anywhere</span>
+            <kbd className={styles.shortcutKbd}>Ctrl / ⌘ + V</kbd>
+          </div>
+          <div className={styles.shortcutRow}>
+            <span>Send message from composer</span>
+            <kbd className={styles.shortcutKbd}>Enter</kbd>
+          </div>
+          <div className={styles.shortcutRow}>
+            <span>Insert new line in composer</span>
+            <kbd className={styles.shortcutKbd}>Shift + Enter</kbd>
+          </div>
+          <div className={styles.shortcutRow}>
+            <span>Upload files or photos</span>
+            <kbd className={styles.shortcutKbd}>Drag &amp; drop</kbd>
+          </div>
+          <div className={styles.shortcutRow}>
+            <span>Close preview or modal</span>
+            <kbd className={styles.shortcutKbd}>Esc</kbd>
+          </div>
+        </div>
       </Modal>
 
       <Modal

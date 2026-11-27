@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from '@/lib/mvp/auth';
+import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import {
   decodeSessionToken,
   encodeSessionToken,
@@ -21,9 +22,21 @@ export async function GET() {
     if (session) {
       const state = await getWorkspaceState(session.workspaceId, session.deviceId);
       if (state && (!auth || !state.workspace.user_id || state.workspace.user_id === auth.userId)) {
+        let userEmail = auth?.email ?? null;
+        if (!userEmail && state.workspace.user_id) {
+          const supabase = getSupabaseAdmin();
+          if (supabase) {
+            try {
+              const { data } = await supabase.auth.admin.getUserById(state.workspace.user_id);
+              userEmail = data.user?.email ?? null;
+            } catch {
+              userEmail = null;
+            }
+          }
+        }
         return NextResponse.json({
           ...state,
-          userEmail: auth?.email ?? null,
+          userEmail,
           deviceId: session.deviceId,
         });
       }
