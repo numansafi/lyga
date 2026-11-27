@@ -1,8 +1,7 @@
-import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
+import { mapStoreError, withWorkspaceSession } from '@/lib/mvp/api-context';
 import { assertSafeBlobKey } from '@/lib/mvp/blob-store';
 import type { FeedItemKind } from '@/lib/mvp/constants';
-import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
 import {
   addFeedItem,
   clearWorkspaceFeed,
@@ -13,13 +12,7 @@ import {
 const VALID_KINDS = new Set<FeedItemKind>(['text', 'link', 'code', 'media', 'file']);
 
 export async function POST(req: Request) {
-  try {
-    const cookieStore = await cookies();
-    const session = decodeSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-    }
-
+  return withWorkspaceSession('mvp items POST', 'Unable to save item.', async ({ session }) => {
     const body = (await req.json().catch(() => null)) as {
       kind?: unknown;
       encryptedMeta?: unknown;
@@ -69,41 +62,20 @@ export async function POST(req: Request) {
     });
 
     if (!result.ok) {
-      if (result.reason === 'file_too_large') {
-        return NextResponse.json(
-          { error: 'Free plan supports files up to 500 MB.', code: 'FILE_TOO_LARGE' },
-          { status: 413 }
-        );
-      }
-      if (result.reason === 'storage_full') {
-        return NextResponse.json(
-          { error: 'Free plan 2 GB storage limit reached.', code: 'STORAGE_FULL' },
-          { status: 413 }
-        );
-      }
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+      return mapStoreError(result.reason);
     }
 
     return NextResponse.json({ ok: true, item: result.item });
-  } catch (err) {
-    console.error('[mvp items POST]', err);
-    return NextResponse.json({ error: 'Unable to save item.' }, { status: 500 });
-  }
+  });
 }
 
 export async function DELETE(req: Request) {
-  try {
-    const cookieStore = await cookies();
-    const session = decodeSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-    }
-
+  return withWorkspaceSession('mvp items DELETE', 'Unable to delete item.', async ({ session }) => {
     const url = new URL(req.url);
     if (url.searchParams.get('all') === 'true') {
       const cleared = await clearWorkspaceFeed(session.workspaceId, session.deviceId);
       if (!cleared) {
-        return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+        return mapStoreError('unauthorized');
       }
       return NextResponse.json({ ok: true });
     }
@@ -115,24 +87,15 @@ export async function DELETE(req: Request) {
 
     const deleted = await removeFeedItem(session.workspaceId, session.deviceId, id);
     if (!deleted) {
-      return NextResponse.json({ error: 'Item not found.' }, { status: 404 });
+      return mapStoreError('not_found', { not_found: 'Item not found.' });
     }
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
-    console.error('[mvp items DELETE]', err);
-    return NextResponse.json({ error: 'Unable to delete item.' }, { status: 500 });
-  }
+  });
 }
 
 export async function PATCH(req: Request) {
-  try {
-    const cookieStore = await cookies();
-    const session = decodeSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
-    if (!session) {
-      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
-    }
-
+  return withWorkspaceSession('mvp items PATCH', 'Unable to update item.', async ({ session }) => {
     const body = (await req.json().catch(() => null)) as {
       id?: unknown;
       kind?: unknown;
@@ -162,12 +125,9 @@ export async function PATCH(req: Request) {
     });
 
     if (!updated) {
-      return NextResponse.json({ error: 'Item not found.' }, { status: 404 });
+      return mapStoreError('not_found', { not_found: 'Item not found.' });
     }
 
     return NextResponse.json({ ok: true, item: updated });
-  } catch (err) {
-    console.error('[mvp items PATCH]', err);
-    return NextResponse.json({ error: 'Unable to update item.' }, { status: 500 });
-  }
+  });
 }

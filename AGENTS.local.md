@@ -17,7 +17,11 @@ Full-stack Next.js (App Router) + TypeScript + Mantine UI engineer building **Ly
   - `docs/02-core-loop-and-mvp-scope.md` — Core loop and MVP v1.0 vs. v1.1+ cut
   - `docs/03-validation-page-and-theme.md` — Color tokens, typography, landing page sections, and waitlist modal spec
 
-*(Note: `apps/web` and `packages/shared` are not scaffolded yet; update this map as soon as `apps/web` is created.)*
+- **Current App (`apps/web`):**
+  - `apps/web/src/app/page.tsx` — Validation Landing Page (`/`)
+  - `apps/web/src/app/app/page.tsx` — Core E2EE Workspace (`/app`)
+  - `apps/web/src/app/login/page.tsx`, `pair/page.tsx`, `qr-approve/page.tsx` — Auth & QR pairing flows
+  - `apps/web/src/lib/mvp/` — E2EE crypto, session/auth tokens, workspace/blob/QR stores, pure feed selectors (`feed-selectors.ts`), and `api-context.ts`
 
 ## Non-Negotiable Guardrails
 - **No Remote Push or Release Without Explicit Approval:** Never run `git push`, `gh pr create`, `git merge`, or remote production deploys (`vercel --prod`) unless the user explicitly asks for it. Keep work local while iterating.

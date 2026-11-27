@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test": "node --test src/lib/waitlist-store.test.ts src/lib/email-validation.test.ts src/lib/mvp/mvp-store.test.ts src/lib/mvp/crypto.test.ts src/lib/mvp/blob-store.test.ts src/lib/mvp/qr-login-store.test.ts src/lib/mvp/qr-crypto.test.ts src/lib/mvp/zip.test.ts"
+    "test": "node --test src/lib/local-json-store.test.ts src/lib/waitlist-store.test.ts src/lib/email-validation.test.ts src/lib/mvp/mvp-store.test.ts src/lib/mvp/crypto.test.ts src/lib/mvp/blob-store.test.ts src/lib/mvp/qr-login-store.test.ts src/lib/mvp/qr-crypto.test.ts src/lib/mvp/zip.test.ts src/lib/mvp/events.test.ts src/lib/mvp/key-store.test.ts src/lib/mvp/feed-selectors.test.ts src/lib/mvp/api-context.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1177.0",
@@ -22,8 +22,7 @@
     "posthog-js": "^1.236.0",
     "qrcode": "^1.5.4",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "react-file-icon": "^1.6.0"
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@types/mailcheck": "^1.1.37",
@@ -31,7 +30,6 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
-    "@types/react-file-icon": "^1.0.5",
     "postcss": "^8.5.3",
     "postcss-preset-mantine": "^1.18.0",
     "postcss-simple-vars": "^7.0.1",

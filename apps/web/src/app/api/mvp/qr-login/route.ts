@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
+import { setSessionCookie } from '@/lib/mvp/api-context';
 import {
   createQrLoginChallenge,
   pollQrLoginChallenge,
 } from '@/lib/mvp/qr-login-store';
-import { encodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
 import { pairDeviceByCode } from '@/lib/mvp/workspace-store';
 
 export async function POST() {
@@ -11,8 +11,9 @@ export async function POST() {
     const challenge = await createQrLoginChallenge();
     return NextResponse.json(challenge);
   } catch (err) {
+    console.error('[mvp qr-login POST]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Unable to create QR session.' },
+      { error: 'Unable to create QR session.' },
       { status: 500 }
     );
   }
@@ -48,31 +49,24 @@ export async function GET(req: Request) {
       );
     }
 
-    const token = encodeSessionToken({
-      workspaceId: paired.workspace.id,
-      deviceId: paired.device.id,
-    });
-
     const res = NextResponse.json({
       status: 'approved',
       workspaceId: paired.workspace.id,
       encryptedWmk: state.encryptedWmk,
     });
 
-    res.cookies.set(SESSION_COOKIE_NAME, token, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: process.env.NODE_ENV === 'production',
-      path: '/',
-      maxAge: 60 * 60 * 24 * 30,
+    setSessionCookie(res, {
+      workspaceId: paired.workspace.id,
+      deviceId: paired.device.id,
     });
 
     return res;
   } catch (err) {
+    console.error('[mvp qr-login GET]', err);
     return NextResponse.json(
       {
         status: 'error',
-        error: err instanceof Error ? err.message : 'Unable to complete QR pairing.',
+        error: 'Unable to complete QR pairing.',
       },
       { status: 500 }
     );

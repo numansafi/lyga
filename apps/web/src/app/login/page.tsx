@@ -1,17 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Loader } from '@mantine/core';
 import { Eye, EyeOff, Lock, Mail, RefreshCw, X } from 'lucide-react';
-import { LygaQrCode } from '@/components/LygaQrCode';
 import { validateAuthEmail } from '@/lib/email-validation';
-import { detectDeviceName } from '@/lib/mvp/device-label';
-import { saveWorkspaceKey } from '@/lib/mvp/key-store';
-import { createEphemeralQrKey, decryptWmkFromQr } from '@/lib/mvp/qr-crypto';
+import { useQrLoginSession } from '@/lib/mvp/use-qr-login';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import styles from './Login.module.css';
+
+const LygaQrCode = dynamic(
+  () => import('@/components/LygaQrCode').then((m) => m.LygaQrCode),
+  { ssr: false }
+);
 
 type AuthMode = 'otp' | 'password';
 
@@ -26,12 +29,13 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
-  const [qrUrl, setQrUrl] = useState('');
-  const [qrExpired, setQrExpired] = useState(false);
-  const [qrChallenge, setQrChallenge] = useState<{ id: string; secret: string } | null>(null);
-  const qrKeyRef = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { qrUrl, qrExpired, startQrSession } = useQrLoginSession({
+    enabled: !checking,
+    onApproved: () => router.replace('/app'),
+    onError: (msg) => setErrorMsg(msg),
+  });
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
     password?: string;
@@ -60,82 +64,6 @@ export default function LoginPage() {
       active = false;
     };
   }, [router]);
-
-  const startQrSession = useCallback(async () => {
-    try {
-      setQrExpired(false);
-      const qrKey = createEphemeralQrKey();
-      const res = await fetch('/api/mvp/qr-login', { method: 'POST' });
-      if (!res.ok) return;
-      const data = (await res.json()) as { id: string; secret: string };
-      qrKeyRef.current = qrKey;
-      setQrChallenge({ id: data.id, secret: data.secret });
-      setQrUrl(
-        `${window.location.origin}/qr-approve?id=${encodeURIComponent(data.id)}#k=${encodeURIComponent(qrKey)}`
-      );
-    } catch {
-      // ignore transient init error
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!checking) {
-      void startQrSession();
-    }
-  }, [checking, startQrSession]);
-
-  useEffect(() => {
-    if (!qrChallenge || qrExpired) return;
-    let active = true;
-    let inFlight = false;
-    const timer = window.setInterval(async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try {
-        const label = encodeURIComponent(detectDeviceName());
-        const res = await fetch(
-          `/api/mvp/qr-login?id=${encodeURIComponent(qrChallenge.id)}&secret=${encodeURIComponent(qrChallenge.secret)}&label=${label}`,
-          { cache: 'no-store' }
-        );
-        const data = (await res.json().catch(() => null)) as
-          | { status: 'pending' | 'expired' }
-          | { status: 'approved'; workspaceId: string; encryptedWmk: string }
-          | { status: 'error'; error?: string }
-          | null;
-
-        if (!active || !data) return;
-
-        if (data.status === 'expired') {
-          window.clearInterval(timer);
-          setQrExpired(true);
-        } else if (data.status === 'error') {
-          window.clearInterval(timer);
-          setErrorMsg(data.error ?? 'Could not pair device.');
-          setQrExpired(true);
-        } else if (data.status === 'approved' && qrKeyRef.current) {
-          window.clearInterval(timer);
-          try {
-            const wmk = await decryptWmkFromQr(data.encryptedWmk, qrKeyRef.current);
-            await saveWorkspaceKey(data.workspaceId, wmk);
-            router.replace('/app');
-          } catch {
-            if (!active) return;
-            setErrorMsg('Unable to decrypt workspace key from QR code. Refresh and try again.');
-            setQrExpired(true);
-          }
-        }
-      } catch {
-        // ignore transient network poll errors
-      } finally {
-        inFlight = false;
-      }
-    }, 2000);
-
-    return () => {
-      active = false;
-      window.clearInterval(timer);
-    };
-  }, [qrChallenge, qrExpired, router]);
 
   const exchangeSession = async (accessToken: string) => {
     const res = await fetch('/api/auth/session', {

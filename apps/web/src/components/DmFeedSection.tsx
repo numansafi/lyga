@@ -101,6 +101,35 @@ interface AnimatedMsgProps {
   children: React.ReactNode;
 }
 
+const revealCallbacks = new WeakMap<Element, () => void>();
+let sharedRevealObserver: IntersectionObserver | null = null;
+
+function observeReveal(el: Element, onReveal: () => void): () => void {
+  if (!sharedRevealObserver) {
+    sharedRevealObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const cb = revealCallbacks.get(entry.target);
+            if (cb) {
+              revealCallbacks.delete(entry.target);
+              sharedRevealObserver?.unobserve(entry.target);
+              cb();
+            }
+          }
+        }
+      },
+      { threshold: 0.01 }
+    );
+  }
+  revealCallbacks.set(el, onReveal);
+  sharedRevealObserver.observe(el);
+  return () => {
+    revealCallbacks.delete(el);
+    sharedRevealObserver?.unobserve(el);
+  };
+}
+
 function AnimatedMsg({ side, delayMs = 0, id, children }: AnimatedMsgProps) {
   const ref = useRef<HTMLDivElement>(null);
   const [pending, setPending] = useState(false);
@@ -120,20 +149,10 @@ function AnimatedMsg({ side, delayMs = 0, id, children }: AnimatedMsgProps) {
     }
 
     setPending(true);
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setVisible(true);
-          setPending(false);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.01 }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
+    return observeReveal(el, () => {
+      setVisible(true);
+      setPending(false);
+    });
   }, []);
 
   const alignClass = side === 'left' ? styles.msgLeft : styles.msgRight;

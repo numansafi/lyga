@@ -170,4 +170,13 @@ describe('mvp session & workspace-store', () => {
     const afterWipe = await getWorkspaceState(workspace.id, device.id);
     assert.equal(afterWipe, null);
   });
+
+  it('registers distinct devices per browser login up to max_devices', async () => {
+    const { getOrCreateUserWorkspace } = await import('./workspace-store.ts');
+    const first = await getOrCreateUserWorkspace('user-multi', 'Desktop Chrome');
+    const second = await getOrCreateUserWorkspace('user-multi', 'Desktop Edge');
+    assert.equal(first.workspace.id, second.workspace.id);
+    assert.notEqual(first.deviceId, second.deviceId);
+    assert.equal(second.devices.length, 2);
+  });
 });

@@ -13,7 +13,10 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
   const [activeSection, setActiveSection] = useState<'pricing' | 'faq' | null>(null);
 
   useEffect(() => {
-    const onScroll = () => {
+    let rafId = 0;
+
+    const update = () => {
+      rafId = 0;
       setScrolled(window.scrollY > 12);
 
       const faqEl = document.getElementById('faq');
@@ -29,9 +32,17 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
       }
     };
 
-    onScroll();
+    const onScroll = () => {
+      if (rafId) return;
+      rafId = window.requestAnimationFrame(update);
+    };
+
+    update();
     window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId) window.cancelAnimationFrame(rafId);
+    };
   }, []);
 
   return (

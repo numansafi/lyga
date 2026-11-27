@@ -1,12 +1,16 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import { cookies } from 'next/headers';
-import { NextResponse } from 'next/server';
+import { after, NextResponse } from 'next/server';
+import { createJsonFileStore } from '@/lib/local-json-store';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from '@/lib/mvp/auth';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 const VALID_CATEGORIES = new Set(['bug', 'idea', 'other']);
+const localFeedbackStore = createJsonFileStore<unknown[]>({
+  filename: 'feedback.json',
+  envDirVar: 'LYGA_MVP_DIR',
+  defaultValue: () => [],
+});
 
 export async function POST(req: Request) {
   try {
@@ -46,22 +50,22 @@ export async function POST(req: Request) {
 
     const supabase = getSupabaseAdmin();
     if (supabase && auth?.email) {
-      await supabase
-        .from('waitlist')
-        .update({ pain_note: `[${category}] ${message.slice(0, 500)}` })
-        .eq('email', auth.email.toLowerCase())
-        .then(() => undefined, () => undefined);
+      const email = auth.email.toLowerCase();
+      after(async () => {
+        await supabase
+          .from('waitlist')
+          .update({ pain_note: `[${category}] ${message.slice(0, 500)}` })
+          .eq('email', email)
+          .then(() => undefined, () => undefined);
+      });
     }
 
     if (process.env.NODE_ENV !== 'production') {
-      const dir = path.join(process.cwd(), '.lyga-dev-data');
-      const filePath = path.join(dir, 'feedback.json');
-      await mkdir(dir, { recursive: true });
-      const existing: unknown[] = await readFile(filePath, 'utf8')
-        .then((raw) => JSON.parse(raw) as unknown[])
-        .catch(() => [] as unknown[]);
-      existing.push(entry);
-      await writeFile(filePath, JSON.stringify(existing, null, 2), 'utf8');
+      await localFeedbackStore.withLock(async () => {
+        const existing = await localFeedbackStore.read();
+        existing.push(entry);
+        await localFeedbackStore.write(existing);
+      });
     } else {
       console.info('[mvp feedback]', JSON.stringify(entry));
     }

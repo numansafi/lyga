@@ -1,6 +1,5 @@
 import { randomBytes, randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import path from 'node:path';
+import { createJsonFileStore } from '../local-json-store.ts';
 import { getSupabaseAdmin } from '../supabase-admin.ts';
 import { deleteBlob } from './blob-store.ts';
 import {
@@ -21,43 +20,26 @@ interface LocalMvpData {
   items: FeedItemRecord[];
 }
 
-function getMvpFile(): string {
-  const dir = process.env.LYGA_MVP_DIR
-    ? process.env.LYGA_MVP_DIR
-    : path.resolve(process.cwd(), '..', '..', '.lyga-dev-data');
-  return path.join(dir, 'mvp.json');
-}
+const localMvpStore = createJsonFileStore<LocalMvpData>({
+  filename: 'mvp.json',
+  envDirVar: 'LYGA_MVP_DIR',
+  defaultValue: () => ({ workspaces: [], devices: [], items: [] }),
+});
 
-let localLock: Promise<void> = Promise.resolve();
-
-function withLocalLock<T>(fn: () => Promise<T>): Promise<T> {
-  const next = localLock.then(fn, fn);
-  localLock = next.then(
-    () => undefined,
-    () => undefined
-  );
-  return next;
-}
+const withLocalLock = localMvpStore.withLock;
+const readLocalData = localMvpStore.read;
+const writeLocalData = localMvpStore.write;
 
 function generatePairCode(): string {
   return randomBytes(4).toString('hex').toUpperCase();
 }
 
-async function readLocalData(): Promise<LocalMvpData> {
-  try {
-    const raw = await readFile(getMvpFile(), 'utf8');
-    return JSON.parse(raw) as LocalMvpData;
-  } catch {
-    return { workspaces: [], devices: [], items: [] };
+function runBackground(task: () => Promise<void>, schedule?: (fn: () => Promise<void>) => void): void {
+  if (schedule) {
+    schedule(task);
+  } else {
+    void task().catch(() => undefined);
   }
-}
-
-async function writeLocalData(data: LocalMvpData): Promise<void> {
-  const file = getMvpFile();
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmpFile = `${file}.${randomUUID()}.tmp`;
-  await writeFile(tmpFile, JSON.stringify(data, null, 2), 'utf8');
-  await rename(tmpFile, file);
 }
 
 function isExpired(item: FeedItemRecord, nowMs: number): boolean {
@@ -117,7 +99,7 @@ export async function getOrCreateUserWorkspace(
   const label = deviceLabel.slice(0, 40) || 'Desktop Browser';
 
   if (supabase) {
-    const { data: existingWs } = await supabase
+    const { data: existingWs, error: existingWsErr } = await supabase
       .from('workspaces')
       .select('*')
       .eq('user_id', userId)
@@ -125,16 +107,33 @@ export async function getOrCreateUserWorkspace(
       .limit(1)
       .maybeSingle();
 
+    if (existingWsErr) {
+      throw new Error(`Supabase workspace lookup error: ${existingWsErr.message}`);
+    }
+
     if (existingWs) {
       const ws = existingWs as WorkspaceRecord;
-      const { data: devs } = await supabase
-        .from('workspace_devices')
-        .select('*')
-        .eq('workspace_id', ws.id)
-        .order('created_at', { ascending: true });
-      const devList = (devs ?? []) as DeviceRecord[];
+      const [devsRes, itemsRes] = await Promise.all([
+        supabase
+          .from('workspace_devices')
+          .select('*')
+          .eq('workspace_id', ws.id)
+          .order('created_at', { ascending: true }),
+        supabase
+          .from('feed_items')
+          .select('*')
+          .eq('workspace_id', ws.id)
+          .order('created_at', { ascending: false }),
+      ]);
+      if (devsRes.error) {
+        throw new Error(`Supabase devices query error: ${devsRes.error.message}`);
+      }
+      if (itemsRes.error) {
+        throw new Error(`Supabase items query error: ${itemsRes.error.message}`);
+      }
+      const devList = (devsRes.data ?? []) as DeviceRecord[];
       let activeDevice = devList[0];
-      if (!activeDevice) {
+      if (!activeDevice || devList.length < ws.max_devices) {
         const now = new Date().toISOString();
         const created: DeviceRecord = {
           id: randomUUID(),
@@ -143,13 +142,18 @@ export async function getOrCreateUserWorkspace(
           created_at: now,
           last_seen_at: now,
         };
-        await supabase.from('workspace_devices').insert(created);
+        const { error: devInsertErr } = await supabase.from('workspace_devices').insert(created);
+        if (devInsertErr) {
+          throw new Error(`Supabase device insert error: ${devInsertErr.message}`);
+        }
         activeDevice = created;
+        devList.push(created);
       }
-      const state = await getWorkspaceState(ws.id, activeDevice.id);
-      if (state) {
-        return { ...state, deviceId: activeDevice.id };
-      }
+      const nowMs = Date.now();
+      const allItems = (itemsRes.data ?? []) as FeedItemRecord[];
+      const items = allItems.filter((it) => !isExpired(it, nowMs));
+      const usedBytes = items.reduce((sum, it) => sum + Number(it.size_bytes || 0), 0);
+      return { workspace: ws, devices: devList, items, usedBytes, deviceId: activeDevice.id };
     }
 
     const { workspace, device } = await createWorkspaceWithDevice(label, userId);
@@ -161,7 +165,7 @@ export async function getOrCreateUserWorkspace(
     const ws = data.workspaces.find((w) => w.user_id === userId);
     if (!ws) return null;
     let devs = data.devices.filter((d) => d.workspace_id === ws.id);
-    if (devs.length === 0) {
+    if (devs.length === 0 || devs.length < ws.max_devices) {
       const now = new Date().toISOString();
       const dev: DeviceRecord = {
         id: randomUUID(),
@@ -172,7 +176,7 @@ export async function getOrCreateUserWorkspace(
       };
       data.devices.push(dev);
       await writeLocalData(data);
-      devs = [dev];
+      return { workspaceId: ws.id, deviceId: dev.id };
     }
     return { workspaceId: ws.id, deviceId: devs[0].id };
   });
@@ -190,7 +194,8 @@ export async function getOrCreateUserWorkspace(
 
 export async function getWorkspaceState(
   workspaceId: string,
-  deviceId: string
+  deviceId: string,
+  scheduleCleanup?: (fn: () => Promise<void>) => void
 ): Promise<{
   workspace: WorkspaceRecord;
   devices: DeviceRecord[];
@@ -215,6 +220,15 @@ export async function getWorkspaceState(
         .order('created_at', { ascending: false }),
     ]);
 
+    if (wsRes.error) {
+      throw new Error(`Supabase workspace query error: ${wsRes.error.message}`);
+    }
+    if (devRes.error) {
+      throw new Error(`Supabase devices query error: ${devRes.error.message}`);
+    }
+    if (itemsRes.error) {
+      throw new Error(`Supabase items query error: ${itemsRes.error.message}`);
+    }
     if (!wsRes.data) return null;
 
     const devList = (devRes.data ?? []) as DeviceRecord[];
@@ -224,16 +238,17 @@ export async function getWorkspaceState(
     const expiredItems = allItems.filter((it) => isExpired(it, nowMs));
     if (expiredItems.length > 0) {
       const expiredIds = expiredItems.map((it) => it.id);
-      for (const exp of expiredItems) {
-        if (exp.blob_key) {
-          void deleteBlob(exp.blob_key).catch(() => undefined);
-        }
-      }
-      void supabase
-        .from('feed_items')
-        .delete()
-        .eq('workspace_id', workspaceId)
-        .in('id', expiredIds);
+      const blobKeys = expiredItems.map((it) => it.blob_key).filter((k): k is string => Boolean(k));
+      runBackground(async () => {
+        await Promise.all([
+          ...blobKeys.map((k) => deleteBlob(k).catch(() => undefined)),
+          supabase
+            .from('feed_items')
+            .delete()
+            .eq('workspace_id', workspaceId)
+            .in('id', expiredIds),
+        ]);
+      }, scheduleCleanup);
     }
 
     const items = allItems.filter((it) => !isExpired(it, nowMs));
@@ -284,18 +299,20 @@ export async function pairDeviceByCode(
   const supabase = getSupabaseAdmin();
 
   if (supabase) {
-    const { data: ws } = await supabase
+    const { data: ws, error: wsErr } = await supabase
       .from('workspaces')
       .select('*')
       .eq('pair_code', code)
       .maybeSingle();
+    if (wsErr) throw new Error(`Supabase pair workspace lookup error: ${wsErr.message}`);
     if (!ws) return { ok: false, reason: 'not_found' };
 
     const workspace = ws as WorkspaceRecord;
-    const { count } = await supabase
+    const { count, error: countErr } = await supabase
       .from('workspace_devices')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspace.id);
+    if (countErr) throw new Error(`Supabase pair device count error: ${countErr.message}`);
 
     if ((count ?? 0) >= workspace.max_devices) {
       return { ok: false, reason: 'device_limit' };
@@ -426,7 +443,7 @@ export async function removeFeedItem(
   if (!target) return false;
 
   if (target.blob_key) {
-    void deleteBlob(target.blob_key).catch(() => undefined);
+    await deleteBlob(target.blob_key).catch(() => undefined);
   }
 
   const supabase = getSupabaseAdmin();
@@ -597,10 +614,11 @@ export async function clearWorkspaceFeed(
   const state = await getWorkspaceState(workspaceId, deviceId);
   if (!state) return false;
 
-  for (const it of state.items) {
-    if (it.blob_key) {
-      void deleteBlob(it.blob_key).catch(() => undefined);
-    }
+  const clearBlobKeys = state.items
+    .map((it) => it.blob_key)
+    .filter((k): k is string => Boolean(k));
+  if (clearBlobKeys.length > 0) {
+    await Promise.allSettled(clearBlobKeys.map((k) => deleteBlob(k)));
   }
 
   const supabase = getSupabaseAdmin();
@@ -629,10 +647,9 @@ export async function deleteWorkspaceAndAccount(
   const state = await getWorkspaceState(workspaceId, deviceId);
   if (!state) return false;
 
-  for (const it of state.items) {
-    if (it.blob_key) {
-      await deleteBlob(it.blob_key).catch(() => undefined);
-    }
+  const blobKeys = state.items.map((it) => it.blob_key).filter((k): k is string => Boolean(k));
+  if (blobKeys.length > 0) {
+    await Promise.all(blobKeys.map((k) => deleteBlob(k).catch(() => undefined)));
   }
 
   const supabase = getSupabaseAdmin();

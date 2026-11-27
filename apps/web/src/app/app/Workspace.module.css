@@ -217,6 +217,8 @@
   align-items: flex-end;
   gap: 8px;
   width: 100%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 
 .msgOut {
@@ -2072,6 +2074,8 @@
   padding: 12px 14px;
   border-bottom: 1px solid #153b37;
   flex-wrap: wrap;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 64px;
 }
 
 .groupRow:last-child {
@@ -2967,6 +2971,8 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
 }
 
 .mediaTileSelected {

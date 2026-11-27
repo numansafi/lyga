@@ -1,6 +1,7 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button, Loader, Modal } from '@mantine/core';
@@ -10,8 +11,6 @@ import {
   ArrowDownToLine,
   Camera,
   Check,
-  ChevronLeft,
-  ChevronRight,
   ClipboardPaste,
   Code2,
   Copy,
@@ -43,7 +42,6 @@ import {
   UserX,
   X,
 } from 'lucide-react';
-import { LygaQrCode } from '@/components/LygaQrCode';
 import {
   FREE_EXPIRY_DAYS,
   FREE_MAX_STORAGE_BYTES,
@@ -54,7 +52,6 @@ import {
 import {
   classifyFileKind,
   classifyTextKind,
-  decryptFileChunked,
   decryptString,
   encryptFileChunked,
   encryptString,
@@ -63,118 +60,55 @@ import {
   type DecryptedItemMeta,
 } from '@/lib/mvp/crypto';
 import { getSavedDeviceName, saveDeviceName } from '@/lib/mvp/device-label';
+import {
+  buildCategoryGroups,
+  buildDeviceOptions,
+  computeVaultBreakdown,
+  countFeedKinds,
+  formatBytes,
+  formatTime,
+  getFileExtension,
+  getLinkPreviewInfo,
+  getPreviewKind,
+  IMAGE_EXTS,
+  isSafeHttpUrl,
+  type DecryptedFeedItem,
+  type PreviewKind,
+  type TabFilter,
+} from '@/lib/mvp/feed-selectors';
 import { deleteWorkspaceKey, getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
-import { buildZipArchive, type ZipEntryInput } from '@/lib/mvp/zip';
+import {
+  convertHeicIfNeeded,
+  exportItemsToZip,
+  fetchDecryptedPlainBlob as fetchPlainBlobWithKey,
+} from '@/lib/mvp/workspace-blobs';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import styles from './Workspace.module.css';
 
-type TabFilter = 'all' | FeedItemKind;
-
-interface DecryptedFeedItem {
-  raw: FeedItemRecord;
-  meta: DecryptedItemMeta;
-  bodyText: string | null;
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(2)} GB`;
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`;
-  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${bytes} B`;
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  } catch {
-    return '';
-  }
-}
-
-function getDateGroupLabel(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return 'Earlier';
-  const now = new Date();
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const startOfDay = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-  const diffDays = Math.round((startOfToday - startOfDay) / (24 * 60 * 60 * 1000));
-  if (diffDays === 0) return 'Today';
-  if (diffDays === 1) return 'Yesterday';
-  return d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
-}
-
-function getFileExtension(fileName?: string): string {
-  const match = (fileName ?? '').toLowerCase().match(/\.([a-z0-9]{1,8})$/);
-  return match?.[1] ?? 'file';
-}
-
-type PreviewKind = 'image' | 'video' | 'pdf' | 'text' | null;
-
-const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'heif']);
-const VIDEO_EXTS = new Set(['mp4', 'mov', 'webm', 'm4v']);
-const TEXT_EXTS = new Set(['txt', 'md', 'json', 'csv', 'log', 'ts', 'tsx', 'js', 'jsx', 'py', 'css', 'html', 'yml', 'yaml', 'xml']);
-
-function getPreviewKind(item: DecryptedFeedItem): PreviewKind {
-  const mime = (item.meta.mimeType ?? '').toLowerCase();
-  const ext = getFileExtension(item.meta.fileName || item.meta.title);
-  if (mime.startsWith('image/') || IMAGE_EXTS.has(ext)) return 'image';
-  if (mime.startsWith('video/') || VIDEO_EXTS.has(ext)) return 'video';
-  if (mime === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (mime.startsWith('text/') || mime === 'application/json' || TEXT_EXTS.has(ext)) return 'text';
-  return null;
-}
-
-function isSafeHttpUrl(raw?: string | null): string | null {
-  if (!raw) return null;
-  try {
-    const parsed = new URL(raw);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return parsed.href;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-function getLinkPreviewInfo(rawUrl: string): {
-  safeHref: string;
-  hostname: string;
-  pathLabel: string;
-  faviconUrl: string;
-  youtubeThumbUrl: string | null;
-  youtubeEmbedUrl: string | null;
-} | null {
-  try {
-    const safeHref = isSafeHttpUrl(rawUrl);
-    if (!safeHref) return null;
-    const parsed = new URL(safeHref);
-    const hostname = parsed.hostname.replace(/^www\./, '');
-    const pathPart = `${parsed.pathname === '/' ? '' : parsed.pathname}${parsed.search}`;
-    const pathLabel = pathPart ? (pathPart.length > 52 ? `${pathPart.slice(0, 52)}…` : pathPart) : hostname;
-    const faviconUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`;
-
-    let ytId: string | null = null;
-    if (hostname === 'youtu.be') {
-      ytId = parsed.pathname.slice(1).split('/')[0] || null;
-    } else if (hostname === 'youtube.com' || hostname === 'm.youtube.com') {
-      if (parsed.pathname.startsWith('/shorts/')) {
-        ytId = parsed.pathname.split('/')[2] || null;
-      } else {
-        ytId = parsed.searchParams.get('v');
-      }
-    }
-    const validYt = ytId && /^[a-zA-Z0-9_-]{6,20}$/.test(ytId) ? ytId : null;
-    const youtubeThumbUrl = validYt ? `https://i.ytimg.com/vi/${validYt}/hqdefault.jpg` : null;
-    const youtubeEmbedUrl = validYt
-      ? `https://www.youtube-nocookie.com/embed/${validYt}?autoplay=1`
-      : null;
-
-    return { safeHref, hostname, pathLabel, faviconUrl, youtubeThumbUrl, youtubeEmbedUrl };
-  } catch {
-    return null;
-  }
-}
+const LygaQrCode = dynamic(
+  () => import('@/components/LygaQrCode').then((m) => m.LygaQrCode),
+  { ssr: false }
+);
+const WorkspacePreviewModal = dynamic(
+  () => import('@/components/mvp/WorkspacePreviewModal').then((m) => m.WorkspacePreviewModal),
+  { ssr: false }
+);
+const FeedbackModal = dynamic(
+  () => import('@/components/mvp/WorkspaceModals').then((m) => m.FeedbackModal),
+  { ssr: false }
+);
+const ClearFeedModal = dynamic(
+  () => import('@/components/mvp/WorkspaceModals').then((m) => m.ClearFeedModal),
+  { ssr: false }
+);
+const DeleteAccountModal = dynamic(
+  () => import('@/components/mvp/WorkspaceModals').then((m) => m.DeleteAccountModal),
+  { ssr: false }
+);
+const EditItemModal = dynamic(
+  () => import('@/components/mvp/WorkspaceModals').then((m) => m.EditItemModal),
+  { ssr: false }
+);
 
 const ARCHIVE_EXTS = new Set(['zip', 'rar', '7z', 'tar', 'gz']);
 const PDF_EXTS = new Set(['pdf']);
@@ -304,11 +238,11 @@ export default function WorkspacePage() {
             return { ...cached, raw };
           }
           try {
-            const metaJson = await decryptString(key, raw.encrypted_meta);
+            const [metaJson, bodyText] = await Promise.all([
+              decryptString(key, raw.encrypted_meta),
+              raw.encrypted_body ? decryptString(key, raw.encrypted_body) : Promise.resolve(null),
+            ]);
             const meta = JSON.parse(metaJson) as DecryptedItemMeta;
-            const bodyText = raw.encrypted_body
-              ? await decryptString(key, raw.encrypted_body)
-              : null;
             const decrypted: DecryptedFeedItem = { raw, meta, bodyText };
             cache.set(raw.id, decrypted);
             return decrypted;
@@ -425,25 +359,49 @@ export default function WorkspacePage() {
 
   useEffect(() => {
     if (!workspaceId) return;
-    const es = new EventSource('/api/mvp/events');
-    es.addEventListener('refresh', () => {
-      void loadWorkspace();
-    });
+    let pollMs = 12000;
+    let pollTimer: number | null = null;
+    let lastRefreshAt = 0;
 
     const refreshIfVisible = () => {
-      if (document.visibilityState === 'visible') {
-        void loadWorkspace();
-      }
+      if (document.visibilityState !== 'visible') return;
+      const now = Date.now();
+      if (now - lastRefreshAt < 400) return;
+      lastRefreshAt = now;
+      void loadWorkspace();
     };
 
-    const pollTimer = window.setInterval(refreshIfVisible, 4000);
+    const setPollInterval = (nextMs: number) => {
+      if (pollTimer !== null && pollMs === nextMs) return;
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+      }
+      pollMs = nextMs;
+      pollTimer = window.setInterval(refreshIfVisible, pollMs);
+    };
+
+    // Keep a lightweight 12s poll even when SSE is open (serverless instances don't share in-memory SSE)
+    setPollInterval(12000);
+
+    const es = new EventSource('/api/mvp/events');
+    es.addEventListener('ready', () => setPollInterval(12000));
+    es.addEventListener('refresh', () => {
+      setPollInterval(12000);
+      void loadWorkspace();
+    });
+    es.onerror = () => {
+      setPollInterval(4000);
+    };
+
     document.addEventListener('visibilitychange', refreshIfVisible);
     window.addEventListener('focus', refreshIfVisible);
     window.addEventListener('online', refreshIfVisible);
 
     return () => {
       es.close();
-      window.clearInterval(pollTimer);
+      if (pollTimer !== null) {
+        window.clearInterval(pollTimer);
+      }
       document.removeEventListener('visibilitychange', refreshIfVisible);
       window.removeEventListener('focus', refreshIfVisible);
       window.removeEventListener('online', refreshIfVisible);
@@ -675,20 +633,35 @@ export default function WorkspacePage() {
     if (!cryptoKey || !fileList || fileList.length === 0 || sending) return;
     setErrorMsg(null);
 
-    for (const file of Array.from(fileList)) {
-      setSending(true);
-      setUploadStatus({
-        fileName: file.name,
-        sizeBytes: file.size,
-        stage: 'Preparing',
-        pct: 5,
-      });
-      try {
-        const prepRes = await fetch('/api/mvp/upload-url', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ sizeBytes: file.size }),
+    let uploadedAny = false;
+    setSending(true);
+    try {
+      for (const file of Array.from(fileList)) {
+        setUploadStatus({
+          fileName: file.name,
+          sizeBytes: file.size,
+          stage: 'Preparing',
+          pct: 5,
         });
+
+        const kind = classifyFileKind(file.type, file.name);
+        const meta: DecryptedItemMeta = {
+          title: file.name,
+          fileName: file.name,
+          mimeType: file.type || 'application/octet-stream',
+          sizeBytes: file.size,
+          senderDeviceId: deviceId ?? undefined,
+          senderLabel: myDeviceName,
+        };
+
+        const [prepRes, encryptedMeta] = await Promise.all([
+          fetch('/api/mvp/upload-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sizeBytes: file.size }),
+          }),
+          encryptString(cryptoKey, JSON.stringify(meta)),
+        ]);
 
         if (!prepRes.ok) {
           const err = (await prepRes.json().catch(() => null)) as {
@@ -754,17 +727,6 @@ export default function WorkspacePage() {
           pct: 92,
         });
 
-        const kind = classifyFileKind(file.type, file.name);
-        const meta: DecryptedItemMeta = {
-          title: file.name,
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          sizeBytes: file.size,
-          senderDeviceId: deviceId ?? undefined,
-          senderLabel: myDeviceName,
-        };
-        const encryptedMeta = await encryptString(cryptoKey, JSON.stringify(meta));
-
         const saveRes = await fetch('/api/mvp/items', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -784,34 +746,28 @@ export default function WorkspacePage() {
           break;
         }
 
+        uploadedAny = true;
         setUploadStatus({
           fileName: file.name,
           sizeBytes: file.size,
           stage: 'Saving',
           pct: 100,
         });
-        await loadWorkspace();
-      } finally {
-        setSending(false);
-        setUploadStatus(null);
       }
+
+      if (uploadedAny) {
+        await loadWorkspace();
+      }
+    } finally {
+      setSending(false);
+      setUploadStatus(null);
     }
   };
 
   const fetchDecryptedPlainBlob = useCallback(
     async (item: DecryptedFeedItem): Promise<Blob | null> => {
-      if (!cryptoKey || !item.raw.blob_key) return null;
-      const urlRes = await fetch(`/api/mvp/download-url?id=${encodeURIComponent(item.raw.id)}`);
-      if (!urlRes.ok) return null;
-      const { downloadUrl } = (await urlRes.json()) as { downloadUrl: string };
-      const blobRes = await fetch(downloadUrl);
-      if (!blobRes.ok) return null;
-      const encBuf = await blobRes.arrayBuffer();
-      return decryptFileChunked(
-        cryptoKey,
-        encBuf,
-        item.meta.mimeType || 'application/octet-stream'
-      );
+      if (!cryptoKey) return null;
+      return fetchPlainBlobWithKey(cryptoKey, item);
     },
     [cryptoKey]
   );
@@ -829,22 +785,7 @@ export default function WorkspacePage() {
         try {
           const plainBlob = await fetchDecryptedPlainBlob(item);
           if (!plainBlob) return null;
-          const ext = getFileExtension(item.meta.fileName || item.meta.title);
-          const mime = (item.meta.mimeType ?? '').toLowerCase();
-          let displayBlob = plainBlob;
-          if (ext === 'heic' || ext === 'heif' || mime === 'image/heic' || mime === 'image/heif') {
-            try {
-              const heic2any = (await import('heic2any')).default;
-              const converted = await heic2any({
-                blob: plainBlob,
-                toType: 'image/jpeg',
-                quality: 0.9,
-              });
-              displayBlob = Array.isArray(converted) ? converted[0] : converted;
-            } catch {
-              // Fall back to raw blob (works natively on Safari)
-            }
-          }
+          const displayBlob = await convertHeicIfNeeded(plainBlob, item);
           const objectUrl = URL.createObjectURL(displayBlob);
           previewUrlsRef.current[item.raw.id] = objectUrl;
           setPreviewUrls((curr) => ({ ...curr, [item.raw.id]: objectUrl }));
@@ -978,54 +919,15 @@ export default function WorkspacePage() {
   };
 
   const handleExportZip = async () => {
-    if (items.length === 0 || exportingZip) return;
+    if (!cryptoKey || items.length === 0 || exportingZip) return;
     setAccountMenuOpen(false);
     setExportingZip(true);
     setErrorMsg(null);
     try {
-      const entries: ZipEntryInput[] = [];
-      const notesLines: string[] = [];
-      const enc = new TextEncoder();
-
-      for (const item of items) {
-        if (item.raw.kind === 'media' || item.raw.kind === 'file') {
-          const plainBlob = await fetchDecryptedPlainBlob(item);
-          if (plainBlob) {
-            const buf = new Uint8Array(await plainBlob.arrayBuffer());
-            entries.push({
-              name: item.meta.fileName || item.meta.title || `${item.raw.id}.bin`,
-              data: buf,
-            });
-          }
-        } else if (item.bodyText) {
-          notesLines.push(
-            `[${new Date(item.raw.created_at).toISOString()}] (${item.raw.kind})\n${item.bodyText}\n`
-          );
-        }
+      const result = await exportItemsToZip(cryptoKey, items);
+      if (!result.ok) {
+        setErrorMsg(result.error);
       }
-
-      if (notesLines.length > 0) {
-        entries.push({
-          name: 'lyga-notes.txt',
-          data: enc.encode(notesLines.join('\n---\n\n')),
-        });
-      }
-
-      if (entries.length === 0) {
-        setErrorMsg('No items could be decrypted for export.');
-        return;
-      }
-
-      const zipBytes = buildZipArchive(entries);
-      const blob = new Blob([zipBytes as BlobPart], { type: 'application/zip' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `lyga-export-${new Date().toISOString().slice(0, 10)}.zip`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch {
       setErrorMsg('Failed to export workspace ZIP.');
     } finally {
@@ -1042,6 +944,11 @@ export default function WorkspacePage() {
         setErrorMsg('Unable to clear feed.');
         return;
       }
+      for (const url of Object.values(previewUrlsRef.current)) {
+        URL.revokeObjectURL(url);
+      }
+      previewUrlsRef.current = {};
+      setPreviewUrls({});
       setItems([]);
       setUsedBytes(0);
       setSelectedIds([]);
@@ -1260,7 +1167,7 @@ export default function WorkspacePage() {
         setItems((curr) =>
           curr.some((it) => it.raw.id === id)
             ? curr
-            : [...curr, target].sort((a, b) => a.raw.created_at.localeCompare(b.raw.created_at))
+            : [...curr, target].sort((a, b) => b.raw.created_at.localeCompare(a.raw.created_at))
         );
         if (target.raw.size_bytes) {
           setUsedBytes((curr) => curr + Number(target.raw.size_bytes || 0));
@@ -1298,19 +1205,9 @@ export default function WorkspacePage() {
     return [...base].reverse();
   }, [filter, items]);
 
-  const counts = useMemo(() => {
-    const map: Record<FeedItemKind, number> = {
-      media: 0,
-      link: 0,
-      code: 0,
-      file: 0,
-      text: 0,
-    };
-    for (const it of items) {
-      map[it.raw.kind] += 1;
-    }
-    return map;
-  }, [items]);
+  const deferredSearchQuery = useDeferredValue(searchQuery);
+
+  const counts = useMemo(() => countFeedKinds(items), [items]);
 
   const peerColorMap = useMemo(() => {
     const map = new Map<string, string>();
@@ -1335,127 +1232,31 @@ export default function WorkspacePage() {
     return map;
   }, [devices, deviceId, items]);
 
-  const deviceOptions = useMemo(() => {
-    const peerDots = ['#7dd3fc', '#6ee7b7', '#93c5fd', '#5eead4'];
-    const opts: Array<{ id: string; label: string; dotColor: string }> = [];
-    if (deviceId) {
-      opts.push({ id: deviceId, label: myDeviceName, dotColor: '#2dd4bf' });
-    }
-    let slot = 0;
-    const seen = new Set<string>(deviceId ? [deviceId] : []);
+  const deviceOptions = useMemo(
+    () => buildDeviceOptions(devices, items, deviceId, myDeviceName),
+    [devices, deviceId, items, myDeviceName]
+  );
 
-    for (const dev of devices) {
-      if (!seen.has(dev.id)) {
-        seen.add(dev.id);
-        opts.push({
-          id: dev.id,
-          label: dev.label,
-          dotColor: peerDots[slot % peerDots.length],
-        });
-        slot += 1;
-      }
-    }
+  const deviceOptionMap = useMemo(
+    () => new Map(deviceOptions.map((opt) => [opt.id, opt])),
+    [deviceOptions]
+  );
 
-    for (const it of items) {
-      const sid = it.meta.senderDeviceId;
-      if (sid && !seen.has(sid)) {
-        seen.add(sid);
-        opts.push({
-          id: sid,
-          label: it.meta.senderLabel || 'Paired device',
-          dotColor: peerDots[slot % peerDots.length],
-        });
-        slot += 1;
-      }
-    }
+  const categoryGroups = useMemo(
+    () =>
+      buildCategoryGroups({
+        filter,
+        items,
+        searchQuery: deferredSearchQuery,
+        sortBy,
+        deviceFilter,
+        deviceId,
+        pinnedIds,
+      }),
+    [deferredSearchQuery, deviceFilter, deviceId, filter, items, pinnedIds, sortBy]
+  );
 
-    return opts;
-  }, [devices, deviceId, items, myDeviceName]);
-
-  const categoryGroups = useMemo(() => {
-    if (filter === 'all') return [];
-    const q = searchQuery.trim().toLowerCase();
-    const effectiveSort =
-      sortBy === 'largest' && filter !== 'file' && filter !== 'media' ? 'newest' : sortBy;
-
-    const matching = items.filter((it) => {
-      if (it.raw.kind !== filter) return false;
-      const senderId = it.meta.senderDeviceId ?? deviceId ?? '';
-      if (deviceFilter !== 'all' && senderId !== deviceFilter) return false;
-      if (q) {
-        const hay = `${it.meta.fileName ?? ''} ${it.meta.title ?? ''} ${it.bodyText ?? ''}`.toLowerCase();
-        if (!hay.includes(q)) return false;
-      }
-      return true;
-    });
-
-    const sorted = [...matching].sort((a, b) => {
-      if (effectiveSort === 'largest') return b.raw.size_bytes - a.raw.size_bytes;
-      if (effectiveSort === 'oldest') return a.raw.created_at.localeCompare(b.raw.created_at);
-      return b.raw.created_at.localeCompare(a.raw.created_at);
-    });
-
-    const pinnedSet = new Set(pinnedIds);
-    const pinnedItems = sorted.filter((it) => pinnedSet.has(it.raw.id));
-
-    const groups: Array<{ label: string; items: DecryptedFeedItem[] }> = [];
-    if (pinnedItems.length > 0) {
-      groups.push({ label: 'Pinned', items: pinnedItems });
-    }
-
-    if (effectiveSort === 'largest') {
-      if (sorted.length > 0) {
-        groups.push({ label: 'Largest first', items: sorted });
-      }
-      return groups;
-    }
-
-    for (const it of sorted) {
-      const label = getDateGroupLabel(it.raw.created_at);
-      const last = groups[groups.length - 1];
-      if (last && last.label !== 'Pinned' && last.label === label) {
-        last.items.push(it);
-      } else {
-        groups.push({ label, items: [it] });
-      }
-    }
-    return groups;
-  }, [deviceFilter, deviceId, filter, items, pinnedIds, searchQuery, sortBy]);
-
-  const vaultBreakdown = useMemo(() => {
-    let mediaBytes = 0;
-    let mediaCount = 0;
-    let fileBytes = 0;
-    let fileCount = 0;
-    let noteBytes = 0;
-    let noteCount = 0;
-    for (const item of items) {
-      const size = Number(item.raw.size_bytes || 0);
-      if (item.raw.kind === 'media') {
-        mediaBytes += size;
-        mediaCount += 1;
-      } else if (item.raw.kind === 'file') {
-        fileBytes += size;
-        fileCount += 1;
-      } else {
-        noteBytes += size;
-        noteCount += 1;
-      }
-    }
-    const pct = (b: number) =>
-      b > 0 ? Math.max(2, Math.round((b / FREE_MAX_STORAGE_BYTES) * 1000) / 10) : 0;
-    return {
-      mediaBytes,
-      mediaCount,
-      mediaPct: pct(mediaBytes),
-      fileBytes,
-      fileCount,
-      filePct: pct(fileBytes),
-      noteBytes,
-      noteCount,
-      notePct: pct(noteBytes),
-    };
-  }, [items]);
+  const vaultBreakdown = useMemo(() => computeVaultBreakdown(items), [items]);
 
   const renderQrCard = () => (
     <div className={styles.qrCard}>
@@ -1783,7 +1584,7 @@ export default function WorkspacePage() {
         <div className={styles.devicesList}>
           {devices.map((dev) => {
             const isCurrent = dev.id === deviceId;
-            const opt = deviceOptions.find((o) => o.id === dev.id);
+            const opt = deviceOptionMap.get(dev.id);
             const dotColor = opt?.dotColor ?? (isCurrent ? '#2dd4bf' : '#7dd3fc');
             const label = isCurrent ? myDeviceName : dev.label;
 
@@ -1956,7 +1757,7 @@ export default function WorkspacePage() {
               </svg>
     </div>
             <div className={styles.chatIdentityText}>
-              <div className={styles.chatTitle}>My Lyga</div>
+              <h1 className={styles.chatTitle} style={{ margin: 0 }}>My Lyga</h1>
               <div className={styles.chatSub}>
                 <span className={styles.chatSubEncrypted}>
                   <Lock size={11} aria-hidden="true" />
@@ -2074,6 +1875,7 @@ export default function WorkspacePage() {
                   <Search size={14} aria-hidden="true" />
                   <input
                     type="search"
+                    aria-label="Search workspace items"
                     className={styles.searchInput}
                     placeholder={`Search ${
                       filter === 'text'
@@ -2347,12 +2149,11 @@ export default function WorkspacePage() {
                         const isSelf =
                           !item.meta.senderDeviceId || item.meta.senderDeviceId === deviceId;
                         const senderId = item.meta.senderDeviceId ?? deviceId ?? '';
-                        const senderOpt = deviceOptions.find((d) => d.id === senderId);
+                        const senderOpt = deviceOptionMap.get(senderId);
                         const senderName = isSelf
                           ? myDeviceName
-                          : devices.find((d) => d.id === senderId)?.label ||
+                          : senderOpt?.label ||
                             item.meta.senderLabel ||
-                            senderOpt?.label ||
                             'Paired device';
                         const dotColor = senderOpt?.dotColor ?? '#7dd3fc';
                         const copyValue = item.bodyText ?? item.meta.title;
@@ -2673,7 +2474,9 @@ export default function WorkspacePage() {
                       ? (peerColorMap.get(item.meta.senderDeviceId) ?? styles.peer0)
                       : styles.peer0;
                   const senderName =
-                    devices.find((d) => d.id === item.meta.senderDeviceId)?.label ||
+                    (item.meta.senderDeviceId
+                      ? deviceOptionMap.get(item.meta.senderDeviceId)?.label
+                      : undefined) ||
                     item.meta.senderLabel ||
                     'Paired device';
 
@@ -2996,6 +2799,7 @@ export default function WorkspacePage() {
                 <textarea
                   ref={textareaRef}
                   rows={1}
+                  aria-label="Send a note, link, or file"
                   className={styles.composerInput}
                   placeholder="Send a note, link, or file…"
                   value={draft}
@@ -3087,332 +2891,63 @@ export default function WorkspacePage() {
     </div>
       </Modal>
 
-      <Modal
+      <FeedbackModal
         opened={feedbackOpen}
+        category={feedbackCategory}
+        text={feedbackText}
+        sent={feedbackSent}
+        submitting={feedbackSubmitting}
         onClose={() => setFeedbackOpen(false)}
-        title="Send feedback"
-        centered
-        classNames={{
-          content: styles.darkModalContent,
-          header: styles.darkModalHeader,
-          title: styles.darkModalTitle,
-          close: styles.darkModalClose,
-          body: styles.darkModalBody,
-        }}
-      >
-        {feedbackSent ? (
-          <p className={styles.modalConfirmCopy} style={{ color: '#5eead4' }}>
-            Thanks — your feedback has been sent!
-          </p>
-        ) : (
-          <div className={styles.modalStack}>
-            <div className={styles.feedbackPills} role="group" aria-label="Feedback category">
-              {(
-                [
-                  ['idea', 'Idea'],
-                  ['bug', 'Bug'],
-                  ['other', 'Other'],
-                ] as const
-              ).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`${styles.feedbackPill} ${
-                    feedbackCategory === key ? styles.feedbackPillActive : ''
-                  }`}
-                  onClick={() => setFeedbackCategory(key)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <textarea
-              className={styles.modalTextarea}
-              rows={4}
-              maxLength={2000}
-              placeholder="Tell us what's working, what broke, or what you'd love next…"
-              value={feedbackText}
-              onChange={(e) => setFeedbackText(e.currentTarget.value)}
-            />
-            <div className={styles.modalActions}>
-              <button
-                type="button"
-                className={styles.secondaryBtn}
-                onClick={() => setFeedbackOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className={styles.primaryBtn}
-                disabled={feedbackSubmitting || !feedbackText.trim()}
-                onClick={() => void handleSubmitFeedback()}
-              >
-                {feedbackSubmitting ? 'Sending…' : 'Send feedback'}
-              </button>
-            </div>
-          </div>
-        )}
-      </Modal>
+        onCategoryChange={setFeedbackCategory}
+        onTextChange={setFeedbackText}
+        onSubmit={() => void handleSubmitFeedback()}
+      />
 
-      <Modal
+      <ClearFeedModal
         opened={clearFeedOpen}
+        itemCount={items.length}
+        clearing={clearingFeed}
         onClose={() => setClearFeedOpen(false)}
-        title="Clear all storage?"
-        centered
-        classNames={{
-          content: styles.darkModalContent,
-          header: styles.darkModalHeader,
-          title: styles.darkModalTitle,
-          close: styles.darkModalClose,
-          body: styles.darkModalBody,
-        }}
-      >
-        <div className={styles.modalStack}>
-          <p className={styles.modalConfirmCopy}>
-            This permanently deletes{' '}
-            {items.length === 1 ? 'the 1 item' : `all ${items.length} items`} and any encrypted
-            files from your storage. Your account and paired devices stay intact.
-          </p>
-          <div className={styles.modalActions}>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              onClick={() => setClearFeedOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={styles.dangerBtn}
-              disabled={clearingFeed}
-              onClick={() => void handleClearFeed()}
-            >
-              {clearingFeed ? 'Clearing…' : 'Clear all storage'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirm={() => void handleClearFeed()}
+      />
 
-      <Modal
+      <DeleteAccountModal
         opened={deleteAccountOpen}
+        confirmText={deleteConfirmText}
+        deleting={deletingAccount}
         onClose={() => setDeleteAccountOpen(false)}
-        title="Delete account"
-        centered
-        classNames={{
-          content: styles.darkModalContent,
-          header: styles.darkModalHeader,
-          title: styles.darkModalTitle,
-          close: styles.darkModalClose,
-          body: styles.darkModalBody,
-        }}
-      >
-        <div className={styles.modalStack}>
-          <p className={styles.modalConfirmCopy}>
-            This permanently deletes your account, all stored items and encrypted files in your
-            storage, paired devices, and local encryption keys. This cannot be undone.
-          </p>
-          <input
-            type="text"
-            className={styles.modalInput}
-            placeholder="Type DELETE to confirm"
-            value={deleteConfirmText}
-            onChange={(e) => setDeleteConfirmText(e.currentTarget.value)}
-          />
-          <div className={styles.modalActions}>
-            <button
-              type="button"
-              className={styles.secondaryBtn}
-              onClick={() => setDeleteAccountOpen(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className={styles.dangerBtn}
-              disabled={
-                deletingAccount || deleteConfirmText.trim().toUpperCase() !== 'DELETE'
-              }
-              onClick={() => void handleDeleteAccount()}
-            >
-              {deletingAccount ? 'Deleting…' : 'Permanently delete'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onConfirmTextChange={setDeleteConfirmText}
+        onConfirm={() => void handleDeleteAccount()}
+      />
 
-      <Modal
-        opened={Boolean(previewItem)}
+      <WorkspacePreviewModal
+        previewItem={previewItem}
+        previewText={previewText}
+        previewLoading={previewLoading}
+        previewUrls={previewUrls}
+        previewableCount={previewableItems.length}
+        previewIndex={previewIndex}
+        copiedImageId={copiedImageId}
+        downloadingId={downloadingId}
         onClose={() => {
           setPreviewItem(null);
           setPreviewText(null);
         }}
-        title={previewItem?.meta.fileName || previewItem?.meta.title || 'Preview'}
-        size="lg"
-        centered
-        classNames={{
-          content: styles.darkModalContent,
-          header: styles.darkModalHeader,
-          title: styles.darkModalTitle,
-          close: styles.darkModalClose,
-          body: styles.darkModalBody,
-        }}
-      >
-        {previewItem &&
-          (() => {
-            const isLink = previewItem.raw.kind === 'link';
-            const linkInfo =
-              isLink && previewItem.bodyText ? getLinkPreviewInfo(previewItem.bodyText) : null;
-            const pKind = isLink ? null : getPreviewKind(previewItem);
-            const url = isLink ? null : previewUrls[previewItem.raw.id];
-            const openHref = isLink ? (linkInfo?.safeHref ?? undefined) : url;
-            return (
-              <div className={styles.previewModalBody}>
-                {isLink && linkInfo?.youtubeEmbedUrl ? (
-                  <iframe
-                    src={linkInfo.youtubeEmbedUrl}
-                    title={previewItem.bodyText || 'YouTube preview'}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className={styles.previewFrame}
-                  />
-                ) : previewLoading && !url ? (
-                  <div className={styles.previewLoadingBox}>
-                    <Loader color="spruce" size="md" />
-                    <span>Decrypting preview…</span>
-    </div>
-                ) : !url ? (
-                  <div className={styles.previewLoadingBox}>
-                    <span>Preview unavailable. Use Save to download the file.</span>
-    </div>
-                ) : pKind === 'image' ? (
-                  <img
-                    src={url}
-                    alt={previewItem.meta.fileName || previewItem.meta.title}
-                    className={styles.previewMedia}
-                  />
-                ) : pKind === 'video' ? (
-                  <video src={url} controls playsInline className={styles.previewVideo} />
-                ) : pKind === 'pdf' ? (
-                  <iframe
-                    src={url}
-                    title={previewItem.meta.fileName || 'PDF preview'}
-                    className={styles.previewFrame}
-                  />
-                ) : pKind === 'text' ? (
-                  <pre className={styles.previewCode}>{previewText ?? 'Loading…'}</pre>
-                ) : null}
-
-                <div className={styles.previewFooter}>
-                  <div className={styles.previewNavGroup}>
-                    {previewableItems.length > 1 && (
-                      <>
-                        <button
-                          type="button"
-                          className={styles.previewBtn}
-                          aria-label="Previous item"
-                          onClick={() => stepPreview(-1)}
-                        >
-                          <ChevronLeft size={14} aria-hidden="true" />
-                        </button>
-                        <span className={styles.previewMetaText}>
-                          {previewIndex + 1} / {previewableItems.length}
-                        </span>
-                        <button
-                          type="button"
-                          className={styles.previewBtn}
-                          aria-label="Next item"
-                          onClick={() => stepPreview(1)}
-                        >
-                          <ChevronRight size={14} aria-hidden="true" />
-                        </button>
-                      </>
-                    )}
-                    {!isLink && (
-                      <span className={styles.previewMetaText}>
-                        {formatBytes(previewItem.raw.size_bytes)} · Original quality
-                      </span>
-                    )}
-    </div>
-                  <div className={styles.previewActionsGroup}>
-                    {pKind === 'image' && url && (
-                      <button
-                        type="button"
-                        className={styles.previewBtn}
-                        onClick={() => void handleCopyImage(previewItem)}
-                      >
-                        {copiedImageId === previewItem.raw.id ? (
-                          <Check size={13} aria-hidden="true" />
-                        ) : (
-                          <Copy size={13} aria-hidden="true" />
-                        )}
-                        <span>{copiedImageId === previewItem.raw.id ? 'Copied' : 'Copy image'}</span>
-                      </button>
-                    )}
-                    {openHref && (
-                      <a
-                        href={openHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className={styles.previewBtn}
-                      >
-                        <ExternalLink size={13} aria-hidden="true" />
-                        <span>Open</span>
-                      </a>
-                    )}
-                    {!isLink && (
-                      <button
-                        type="button"
-                        className={styles.saveBtnIn}
-                        disabled={downloadingId === previewItem.raw.id}
-                        onClick={() => void handleDownload(previewItem)}
-                      >
-                        <ArrowDownToLine size={14} strokeWidth={2.2} aria-hidden="true" />
-                        <span>{downloadingId === previewItem.raw.id ? 'Saving…' : 'Save'}</span>
-                      </button>
-                    )}
-    </div>
-    </div>
-    </div>
-            );
-          })()}
-      </Modal>
-      <Modal
+        onStep={stepPreview}
+        onCopyImage={(item) => void handleCopyImage(item)}
+        onDownload={(item) => void handleDownload(item)}
+      />
+      <EditItemModal
         opened={Boolean(editingItem)}
+        draft={editDraft}
+        saving={savingEdit}
         onClose={() => {
           setEditingItem(null);
           setEditDraft('');
         }}
-        title="Edit message"
-        centered
-        classNames={{
-          content: styles.darkModalContent,
-          header: styles.darkModalHeader,
-          title: styles.darkModalTitle,
-          close: styles.darkModalClose,
-          body: styles.darkModalBody,
-        }}
-      >
-        <div className={styles.previewModalBody}>
-          <textarea
-            rows={5}
-            className={styles.editTextarea}
-            value={editDraft}
-            onChange={(e) => setEditDraft(e.currentTarget.value)}
-          />
-          <div className={styles.previewFooter}>
-            <span className={styles.previewMetaText}>Re-encrypts for all paired devices</span>
-            <button
-              type="button"
-              className={styles.saveBtnIn}
-              disabled={savingEdit || !editDraft.trim()}
-              onClick={() => void handleSaveEdit()}
-            >
-              <span>{savingEdit ? 'Saving…' : 'Save changes'}</span>
-            </button>
-          </div>
-        </div>
-      </Modal>
+        onDraftChange={setEditDraft}
+        onSave={() => void handleSaveEdit()}
+      />
     </div>
   );
 }

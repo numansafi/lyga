@@ -1,6 +1,5 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import path from 'node:path';
 import type { WaitlistPlan } from './analytics';
+import { createJsonFileStore } from './local-json-store.ts';
 import { getSupabaseAdmin } from './supabase-admin.ts';
 
 export interface WaitlistEntry {
@@ -12,23 +11,11 @@ export interface WaitlistEntry {
   updated_at: string;
 }
 
-const DEV_DIR =
-  process.env.LYGA_WAITLIST_DIR || path.resolve(process.cwd(), '..', '..', '.lyga-dev-data');
-const DEV_FILE = path.join(DEV_DIR, 'waitlist.json');
-
-async function readDevEntries(): Promise<WaitlistEntry[]> {
-  try {
-    const raw = await readFile(DEV_FILE, 'utf8');
-    return JSON.parse(raw) as WaitlistEntry[];
-  } catch {
-    return [];
-  }
-}
-
-async function writeDevEntries(entries: WaitlistEntry[]): Promise<void> {
-  await mkdir(DEV_DIR, { recursive: true });
-  await writeFile(DEV_FILE, JSON.stringify(entries, null, 2), 'utf8');
-}
+const localWaitlistStore = createJsonFileStore<WaitlistEntry[]>({
+  filename: 'waitlist.json',
+  envDirVar: 'LYGA_WAITLIST_DIR',
+  defaultValue: () => [],
+});
 
 export async function saveWaitlistSignup(
   email: string,
@@ -54,27 +41,29 @@ export async function saveWaitlistSignup(
     return data as WaitlistEntry;
   }
 
-  const entries = await readDevEntries();
-  const existingIdx = entries.findIndex((item) => item.email === normalized);
-  const record: WaitlistEntry =
-    existingIdx >= 0
-      ? { ...entries[existingIdx], plan, updated_at: now }
-      : {
-          email: normalized,
-          plan,
-          device_combo: null,
-          pain_note: null,
-          created_at: now,
-          updated_at: now,
-        };
+  return localWaitlistStore.withLock(async () => {
+    const entries = await localWaitlistStore.read();
+    const existingIdx = entries.findIndex((item) => item.email === normalized);
+    const record: WaitlistEntry =
+      existingIdx >= 0
+        ? { ...entries[existingIdx], plan, updated_at: now }
+        : {
+            email: normalized,
+            plan,
+            device_combo: null,
+            pain_note: null,
+            created_at: now,
+            updated_at: now,
+          };
 
-  if (existingIdx >= 0) {
-    entries[existingIdx] = record;
-  } else {
-    entries.push(record);
-  }
-  await writeDevEntries(entries);
-  return record;
+    if (existingIdx >= 0) {
+      entries[existingIdx] = record;
+    } else {
+      entries.push(record);
+    }
+    await localWaitlistStore.write(entries);
+    return record;
+  });
 }
 
 export async function updateWaitlistFeedback(
@@ -108,15 +97,17 @@ export async function updateWaitlistFeedback(
     return;
   }
 
-  const entries = await readDevEntries();
-  const idx = entries.findIndex((item) => item.email === normalized);
-  if (idx >= 0) {
-    entries[idx] = {
-      ...entries[idx],
-      device_combo: deviceCombo !== undefined ? deviceCombo : entries[idx].device_combo,
-      pain_note: painNote !== undefined ? painNote?.trim() || null : entries[idx].pain_note,
-      updated_at: now,
-    };
-    await writeDevEntries(entries);
-  }
+  await localWaitlistStore.withLock(async () => {
+    const entries = await localWaitlistStore.read();
+    const idx = entries.findIndex((item) => item.email === normalized);
+    if (idx >= 0) {
+      entries[idx] = {
+        ...entries[idx],
+        device_combo: deviceCombo !== undefined ? deviceCombo : entries[idx].device_combo,
+        pain_note: painNote !== undefined ? painNote?.trim() || null : entries[idx].pain_note,
+        updated_at: now,
+      };
+      await localWaitlistStore.write(entries);
+    }
+  });
 }

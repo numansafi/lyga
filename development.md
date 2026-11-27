@@ -45,6 +45,7 @@
 | 2026-11-22 | Keep homepage copy platform-agnostic (**phone and computer**), using `iPhone + Windows` only as an outreach wedge | Prevents Android/Mac/Linux visitors from bouncing on the landing page while still letting PostHog `device_combo_selected` measure which setup converts best. |
 
 ## Changelog
+- **2026-11-27 (Architecture & Perf Pass):** Fixed `next build` `/_not-found` + `outputFileTracingRoot` & added `'lucide-react'` to `optimizePackageImports`; extracted `local-json-store.ts`, `api-context.ts`, `feed-selectors.ts`, `workspace-blobs.ts`, `use-qr-login.ts`, and dynamic `WorkspacePreviewModal`; lazy-loaded `posthog-js` (`/` First Load JS 246 kB → 124 kB); gated `/app` 4s polling behind SSE fallback, parallelized E2EE/ZIP/store ops, wired `after()` cleanup, added `content-visibility: auto`, and expanded unit tests to 22/22.
 - **2026-11-27:** Polished `/app` workspace UI and device management: moved desktop account trigger & dropdown to the top-left of the right rail (with E2EE header, Pair another device, Keyboard shortcuts modal, and Pro/Sign out), reordered rail to Pinned → Storage (`Auto-delete: After 7 days`, `Max 500 MB / file`) → Devices (`1 device · Pair another`), upgraded Media Grid/List segmented toggle, replaced `Select` mode with Gmail-style left master checkbox + direct item checkboxes, and compacted chat attachment bubbles (`32px` Preview/Save icon circles). Added device rename/disconnect (`PATCH`/`DELETE /api/mvp/devices`).
 - **2026-11-26:** Implemented Core Web MVP (`/app`, `/pair`, `/api/mvp/*`, `supabase/migrations/0002_workspaces.sql`) with client-side WebCrypto `AES-256-GCM` E2EE (`#wmk=` in `IndexedDB` + URL fragments), Cloudflare R2 + local `.lyga-dev-data/` storage, QR pairing, Midnight Spruce Dark UI, category filtering/search/sort, file/media/link previews + YouTube embed modal, pin/edit/bulk select, upload progress status card, and iOS Safari `visualViewport` + PWA standalone support.
 - **2026-11-22:** Added full Lyga brand & logo kit (`brand/` SVGs, PNGs, `1200×630` OG banner, `brand/README.md`), `apps/web/public/` favicons (`favicon.ico`, `#14B8A6` `favicon.svg`, PWA icons, `site.webmanifest`), `layout.tsx` icon/OG image metadata, and `30×30` white logo mark in `LandingHeader.tsx`.
@@ -54,6 +55,6 @@
 - **2026-11-21:** Completed pre-build Step 1 (`01-problem-and-validation.md`), Step 2 draft (`02-core-loop-and-mvp-scope.md`), Step 3 theme & landing page spec (`03-validation-page-and-theme.md`), `.agents/product-marketing.md`, and initial `project-agent-setup` context.
 
 ## Open Next Steps
-1. Deploy to Vercel with `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, and `NEXT_PUBLIC_POSTHOG_KEY` configured.
-2. Run the 48-hour Reddit/Indie Hackers/X validation test and monitor PostHog funnel conversion.
-3. Finalize `docs/02-core-loop-and-mvp-scope.md` and begin Core Web MVP (`/app`) if validation targets are met.
+1. Deploy to Vercel with `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `LYGA_SESSION_SECRET`, R2 credentials, and `NEXT_PUBLIC_POSTHOG_KEY` configured.
+2. Continue splitting `apps/web/src/app/app/page.tsx` UI sections (Header, MessageStream, ComposerDock, WorkspaceRail) into memoized subcomponents if further bundle/render isolation is needed.
+3. Plan Phase 2 features (Expo mobile app, Stripe/Pro £5/mo billing, public Drop Links, 1-click HEIC → JPG export).

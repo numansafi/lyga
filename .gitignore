@@ -7,3 +7,5 @@ dist/
 .DS_Store
 .lyga-dev-data/
 .vercel
+*.tsbuildinfo
+.impeccable/

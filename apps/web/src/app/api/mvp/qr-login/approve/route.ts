@@ -43,8 +43,9 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
+    console.error('[mvp qr-login approve POST]', err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : 'Could not approve QR sign-in.' },
+      { error: 'Could not approve QR sign-in.' },
       { status: 500 }
     );
   }
