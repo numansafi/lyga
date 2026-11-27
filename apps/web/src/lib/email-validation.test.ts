@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { validateWaitlistEmail } from './email-validation.ts';
+import { validateAuthEmail, validateWaitlistEmail } from './email-validation.ts';
 
 describe('validateWaitlistEmail', () => {
   it('accepts real email addresses and normalizes casing/whitespace', () => {
@@ -37,5 +37,27 @@ describe('validateWaitlistEmail', () => {
       assert.equal(res.valid, false, `Expected ${email} to be rejected`);
       assert.match(res.error ?? '', /real email/i);
     }
+  });
+
+  it('catches common domain and TLD typos like .con or gmial.com', () => {
+    const liveTypo = validateWaitlistEmail('numansafi@live.con');
+    assert.equal(liveTypo.valid, false);
+    assert.equal(liveTypo.error, 'Did you mean numansafi@live.com?');
+
+    const gmailTypo = validateWaitlistEmail('alex@gmial.com');
+    assert.equal(gmailTypo.valid, false);
+    assert.equal(gmailTypo.error, 'Did you mean alex@gmail.com?');
+  });
+});
+
+describe('validateAuthEmail', () => {
+  it('allows valid corporate and short-domain emails while still catching typos', () => {
+    assert.equal(validateAuthEmail('admin@company.com').valid, true);
+    assert.equal(validateAuthEmail('user@x.com').valid, true);
+    assert.equal(validateAuthEmail('alex@proton.com').valid, true);
+
+    const typo = validateAuthEmail('numansafi@live.con');
+    assert.equal(typo.valid, false);
+    assert.equal(typo.error, 'Did you mean numansafi@live.com?');
   });
 });

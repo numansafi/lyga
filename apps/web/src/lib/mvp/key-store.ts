@@ -64,3 +64,24 @@ export async function getWorkspaceKey(workspaceId: string): Promise<string | nul
     return null;
   }
 }
+
+export async function deleteWorkspaceKey(workspaceId: string): Promise<void> {
+  memoryFallback.delete(workspaceId);
+  try {
+    const db = await openDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(workspaceId);
+      tx.oncomplete = () => {
+        db.close();
+        resolve();
+      };
+      tx.onerror = () => {
+        db.close();
+        reject(tx.error);
+      };
+    });
+  } catch {
+    // ignore if IndexedDB is unavailable
+  }
+}

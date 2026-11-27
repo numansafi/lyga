@@ -130,6 +130,11 @@
     padding: 0 8px 0 16px;
   }
 
+  .brand {
+    font-size: 18px;
+    gap: 7px;
+  }
+
   .nav {
     display: none;
   }

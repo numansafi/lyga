@@ -3,8 +3,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Alert, Button, Loader, Modal } from '@mantine/core';
+import { Button, Loader, Modal } from '@mantine/core';
 import {
+  AlertCircle,
+  Archive,
   ArrowDownToLine,
   Camera,
   Check,
@@ -13,29 +15,32 @@ import {
   ClipboardPaste,
   Code2,
   Copy,
+  Download,
+  Eraser,
   ExternalLink,
   Eye,
   FileArchive,
   FileText,
   Image as ImageIcon,
-  Keyboard,
   LayoutGrid,
   Link2,
   List,
   Lock,
   LogOut,
+  MessageSquare,
   Minus,
   Pencil,
   Pin,
   Plus,
-  QrCode,
   Search,
   Send,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   StickyNote,
   Trash2,
   UploadCloud,
+  UserX,
   X,
 } from 'lucide-react';
 import { LygaQrCode } from '@/components/LygaQrCode';
@@ -58,7 +63,8 @@ import {
   type DecryptedItemMeta,
 } from '@/lib/mvp/crypto';
 import { getSavedDeviceName, saveDeviceName } from '@/lib/mvp/device-label';
-import { getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
+import { deleteWorkspaceKey, getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
+import { buildZipArchive, type ZipEntryInput } from '@/lib/mvp/zip';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import styles from './Workspace.module.css';
 
@@ -228,6 +234,13 @@ export default function WorkspacePage() {
   const [pairCopied, setPairCopied] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!infoMsg) return;
+    const timer = window.setTimeout(() => setInfoMsg(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [infoMsg]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
   const [previewItem, setPreviewItem] = useState<DecryptedFeedItem | null>(null);
@@ -245,7 +258,21 @@ export default function WorkspacePage() {
   const [selectedBubbleId, setSelectedBubbleId] = useState<string | null>(null);
   const [showQr, setShowQr] = useState(true);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
-  const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [exportingZip, setExportingZip] = useState(false);
+  const [clearFeedOpen, setClearFeedOpen] = useState(false);
+  const [clearingFeed, setClearingFeed] = useState(false);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<'bug' | 'idea' | 'other'>('idea');
+  const [feedbackText, setFeedbackText] = useState('');
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [feedbackSent, setFeedbackSent] = useState(false);
+  const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
+  const [deleteConfirmText, setDeleteConfirmText] = useState('');
+  const [deletingAccount, setDeletingAccount] = useState(false);
+  const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<{
+    prompt: () => Promise<void>;
+    userChoice: Promise<{ outcome: string }>;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -586,7 +613,7 @@ export default function WorkspacePage() {
         return;
       }
 
-      setErrorMsg('Nothing in clipboard to paste.');
+      setInfoMsg('Nothing in clipboard to paste.');
     } catch {
       setErrorMsg('Clipboard permission denied. Tap the text box and paste directly.');
     }
@@ -771,6 +798,24 @@ export default function WorkspacePage() {
     }
   };
 
+  const fetchDecryptedPlainBlob = useCallback(
+    async (item: DecryptedFeedItem): Promise<Blob | null> => {
+      if (!cryptoKey || !item.raw.blob_key) return null;
+      const urlRes = await fetch(`/api/mvp/download-url?id=${encodeURIComponent(item.raw.id)}`);
+      if (!urlRes.ok) return null;
+      const { downloadUrl } = (await urlRes.json()) as { downloadUrl: string };
+      const blobRes = await fetch(downloadUrl);
+      if (!blobRes.ok) return null;
+      const encBuf = await blobRes.arrayBuffer();
+      return decryptFileChunked(
+        cryptoKey,
+        encBuf,
+        item.meta.mimeType || 'application/octet-stream'
+      );
+    },
+    [cryptoKey]
+  );
+
   const getDecryptedBlobUrl = useCallback(
     async (item: DecryptedFeedItem): Promise<string | null> => {
       if (!cryptoKey || !item.raw.blob_key) return null;
@@ -782,17 +827,8 @@ export default function WorkspacePage() {
 
       const task = (async () => {
         try {
-          const urlRes = await fetch(`/api/mvp/download-url?id=${encodeURIComponent(item.raw.id)}`);
-          if (!urlRes.ok) return null;
-          const { downloadUrl } = (await urlRes.json()) as { downloadUrl: string };
-          const blobRes = await fetch(downloadUrl);
-          if (!blobRes.ok) return null;
-          const encBuf = await blobRes.arrayBuffer();
-          const plainBlob = await decryptFileChunked(
-            cryptoKey,
-            encBuf,
-            item.meta.mimeType || 'application/octet-stream'
-          );
+          const plainBlob = await fetchDecryptedPlainBlob(item);
+          if (!plainBlob) return null;
           const ext = getFileExtension(item.meta.fileName || item.meta.title);
           const mime = (item.meta.mimeType ?? '').toLowerCase();
           let displayBlob = plainBlob;
@@ -823,7 +859,7 @@ export default function WorkspacePage() {
       previewInFlightRef.current.set(item.raw.id, task);
       return task;
     },
-    [cryptoKey]
+    [cryptoKey, fetchDecryptedPlainBlob]
   );
 
   useEffect(() => {
@@ -914,22 +950,178 @@ export default function WorkspacePage() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [previewItem, stepPreview]);
 
+  useEffect(() => {
+    const onBeforeInstall = (e: Event) => {
+      e.preventDefault();
+      setDeferredInstallPrompt(
+        e as unknown as {
+          prompt: () => Promise<void>;
+          userChoice: Promise<{ outcome: string }>;
+        }
+      );
+    };
+    const onInstalled = () => setDeferredInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onInstalled);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!deferredInstallPrompt) return;
+    setAccountMenuOpen(false);
+    await deferredInstallPrompt.prompt().catch(() => undefined);
+    await deferredInstallPrompt.userChoice.catch(() => undefined);
+    setDeferredInstallPrompt(null);
+  };
+
+  const handleExportZip = async () => {
+    if (items.length === 0 || exportingZip) return;
+    setAccountMenuOpen(false);
+    setExportingZip(true);
+    setErrorMsg(null);
+    try {
+      const entries: ZipEntryInput[] = [];
+      const notesLines: string[] = [];
+      const enc = new TextEncoder();
+
+      for (const item of items) {
+        if (item.raw.kind === 'media' || item.raw.kind === 'file') {
+          const plainBlob = await fetchDecryptedPlainBlob(item);
+          if (plainBlob) {
+            const buf = new Uint8Array(await plainBlob.arrayBuffer());
+            entries.push({
+              name: item.meta.fileName || item.meta.title || `${item.raw.id}.bin`,
+              data: buf,
+            });
+          }
+        } else if (item.bodyText) {
+          notesLines.push(
+            `[${new Date(item.raw.created_at).toISOString()}] (${item.raw.kind})\n${item.bodyText}\n`
+          );
+        }
+      }
+
+      if (notesLines.length > 0) {
+        entries.push({
+          name: 'lyga-notes.txt',
+          data: enc.encode(notesLines.join('\n---\n\n')),
+        });
+      }
+
+      if (entries.length === 0) {
+        setErrorMsg('No items could be decrypted for export.');
+        return;
+      }
+
+      const zipBytes = buildZipArchive(entries);
+      const blob = new Blob([zipBytes as BlobPart], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `lyga-export-${new Date().toISOString().slice(0, 10)}.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      setErrorMsg('Failed to export workspace ZIP.');
+    } finally {
+      setExportingZip(false);
+    }
+  };
+
+  const handleClearFeed = async () => {
+    setClearingFeed(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/mvp/items?all=true', { method: 'DELETE' });
+      if (!res.ok) {
+        setErrorMsg('Unable to clear feed.');
+        return;
+      }
+      setItems([]);
+      setUsedBytes(0);
+      setSelectedIds([]);
+      setPinnedIds([]);
+      setClearFeedOpen(false);
+    } catch {
+      setErrorMsg('Unable to clear feed.');
+    } finally {
+      setClearingFeed(false);
+    }
+  };
+
+  const handleSubmitFeedback = async () => {
+    const trimmed = feedbackText.trim();
+    if (!trimmed) return;
+    setFeedbackSubmitting(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/mvp/feedback', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ category: feedbackCategory, message: trimmed }),
+      });
+      if (!res.ok) {
+        setErrorMsg('Unable to send feedback.');
+        return;
+      }
+      setFeedbackSent(true);
+      setFeedbackText('');
+      window.setTimeout(() => {
+        setFeedbackOpen(false);
+        setFeedbackSent(false);
+      }, 1100);
+    } catch {
+      setErrorMsg('Unable to send feedback.');
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmText.trim().toUpperCase() !== 'DELETE') return;
+    setDeletingAccount(true);
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/mvp/workspace', { method: 'DELETE' });
+      if (!res.ok) {
+        setErrorMsg('Unable to delete account.');
+        return;
+      }
+      if (workspace?.id) {
+        await deleteWorkspaceKey(workspace.id);
+      }
+      await getSupabaseBrowser()?.auth.signOut().catch(() => undefined);
+      router.replace('/login');
+    } catch {
+      setErrorMsg('Unable to delete account.');
+    } finally {
+      setDeletingAccount(false);
+    }
+  };
+
   const handleDownload = async (item: DecryptedFeedItem) => {
     if (!cryptoKey || !item.raw.blob_key) return;
     setDownloadingId(item.raw.id);
     setErrorMsg(null);
     try {
-      const objectUrl = await getDecryptedBlobUrl(item);
-      if (!objectUrl) {
+      const plainBlob = await fetchDecryptedPlainBlob(item);
+      if (!plainBlob) {
         setErrorMsg('Failed to decrypt downloaded file.');
         return;
       }
+      const objectUrl = URL.createObjectURL(plainBlob);
       const a = document.createElement('a');
       a.href = objectUrl;
       a.download = item.meta.fileName || 'lyga-download';
       document.body.appendChild(a);
       a.click();
       a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
     } catch {
       setErrorMsg('Failed to decrypt downloaded file.');
     } finally {
@@ -1043,9 +1235,7 @@ export default function WorkspacePage() {
   };
 
   const handleDelete = async (id: string) => {
-    const prevItems = items;
-    const prevUsedBytes = usedBytes;
-    const target = prevItems.find((it) => it.raw.id === id);
+    const target = items.find((it) => it.raw.id === id);
 
     setItems((curr) => curr.filter((it) => it.raw.id !== id));
     if (target?.raw.size_bytes) {
@@ -1062,10 +1252,20 @@ export default function WorkspacePage() {
       });
     }
 
-    const res = await fetch(`/api/mvp/items?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (!res.ok) {
-      setItems(prevItems);
-      setUsedBytes(prevUsedBytes);
+    try {
+      const res = await fetch(`/api/mvp/items?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('delete failed');
+    } catch {
+      if (target) {
+        setItems((curr) =>
+          curr.some((it) => it.raw.id === id)
+            ? curr
+            : [...curr, target].sort((a, b) => a.raw.created_at.localeCompare(b.raw.created_at))
+        );
+        if (target.raw.size_bytes) {
+          setUsedBytes((curr) => curr + Number(target.raw.size_bytes || 0));
+        }
+      }
       setErrorMsg('Unable to delete item.');
     }
   };
@@ -1330,27 +1530,28 @@ export default function WorkspacePage() {
           role="menu"
           aria-label="Account"
         >
-          <div className={styles.accountPopHeader}>
-            <span className={styles.accountPopEmail}>
-              {showLabel ? 'End-to-end encrypted' : userEmail ?? 'Signed in'}
-            </span>
-            <span className={styles.accountPlanPill}>
-              {showLabel ? 'AES-GCM' : 'Free plan'}
-            </span>
-          </div>
-          <div className={styles.railHairline} />
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.accountPopBtn}
-            onClick={() => {
-              setAccountMenuOpen(false);
-              setQrModalOpen(true);
-            }}
-          >
-            <QrCode size={13} aria-hidden="true" />
-            <span>Pair another device</span>
-          </button>
+          {!showLabel && (
+            <>
+              <div className={styles.accountPopHeader}>
+                <span className={styles.accountPopEmail}>
+                  {userEmail ?? 'Signed in'}
+                </span>
+                <span className={styles.accountPlanPill}>Free plan</span>
+              </div>
+              <div className={styles.railHairline} />
+            </>
+          )}
+          {deferredInstallPrompt && (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.accountPopBtn}
+              onClick={() => void handleInstallPwa()}
+            >
+              <Download size={13} aria-hidden="true" />
+              <span>Install Lyga app</span>
+            </button>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -1369,13 +1570,11 @@ export default function WorkspacePage() {
             type="button"
             role="menuitem"
             className={styles.accountPopBtn}
-            onClick={() => {
-              setAccountMenuOpen(false);
-              setShortcutsOpen(true);
-            }}
+            disabled={items.length === 0 || exportingZip}
+            onClick={() => void handleExportZip()}
           >
-            <Keyboard size={13} aria-hidden="true" />
-            <span>Keyboard shortcuts</span>
+            <Archive size={13} aria-hidden="true" />
+            <span>{exportingZip ? 'Exporting ZIP…' : 'Export all (.zip)'}</span>
           </button>
           <button
             type="button"
@@ -1383,7 +1582,21 @@ export default function WorkspacePage() {
             className={styles.accountPopBtn}
             onClick={() => {
               setAccountMenuOpen(false);
-              setErrorMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.');
+              setFeedbackSent(false);
+              setFeedbackOpen(true);
+            }}
+          >
+            <MessageSquare size={13} aria-hidden="true" />
+            <span>Send feedback</span>
+          </button>
+          <div className={styles.railHairline} />
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setInfoMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.');
             }}
           >
             <Sparkles size={13} aria-hidden="true" style={{ color: '#5eead4' }} />
@@ -1392,7 +1605,7 @@ export default function WorkspacePage() {
           <button
             type="button"
             role="menuitem"
-            className={`${styles.accountPopBtn} ${styles.accountPopDanger}`}
+            className={styles.accountPopBtn}
             onClick={() => {
               setAccountMenuOpen(false);
               void (async () => {
@@ -1404,6 +1617,34 @@ export default function WorkspacePage() {
           >
             <LogOut size={13} aria-hidden="true" />
             <span>Sign out</span>
+          </button>
+          <div className={styles.railHairline} />
+          <div className={styles.accountDangerLabel}>Danger zone</div>
+          <button
+            type="button"
+            role="menuitem"
+            className={styles.accountPopBtn}
+            disabled={items.length === 0}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setClearFeedOpen(true);
+            }}
+          >
+            <Eraser size={13} aria-hidden="true" />
+            <span>Clear all storage</span>
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            className={`${styles.accountPopBtn} ${styles.accountPopDanger}`}
+            onClick={() => {
+              setAccountMenuOpen(false);
+              setDeleteConfirmText('');
+              setDeleteAccountOpen(true);
+            }}
+          >
+            <UserX size={13} aria-hidden="true" />
+            <span>Delete account</span>
           </button>
         </div>
       )}
@@ -1714,19 +1955,22 @@ export default function WorkspacePage() {
                 />
               </svg>
     </div>
-            <div>
+            <div className={styles.chatIdentityText}>
               <div className={styles.chatTitle}>My Lyga</div>
               <div className={styles.chatSub}>
                 <span className={styles.chatSubEncrypted}>
                   <Lock size={11} aria-hidden="true" />
-                  End-to-end encrypted
+                  <span>
+                    <span className={styles.hideMobile}>End-to-end </span>
+                    <span className={styles.chatSubEncryptedWord}>encrypted</span>
+                  </span>
                 </span>
-                <span>·</span>
-                <span>
+                <span className={styles.hideMobile}>·</span>
+                <span className={styles.hideMobile}>
                   {deviceCount} of {workspace?.max_devices ?? 2} devices
                 </span>
-    </div>
-    </div>
+              </div>
+            </div>
     </div>
 
           <div className={styles.headerRight}>
@@ -1756,23 +2000,63 @@ export default function WorkspacePage() {
               ))}
     </div>
 
-            <Button
-              size="xs"
-              variant="light"
-              className={styles.mobilePairBtn}
-              leftSection={<QrCode size={14} />}
-              onClick={() => {
-                setShowQr(true);
-                setQrModalOpen(true);
-              }}
-            >
-              Pair
-            </Button>
-            <div className={styles.mobileAccountWrap}>
-              {renderAccountMenu(accountMenuMobileRef)}
+            <div className={styles.headerActions}>
+              <Button
+                size="xs"
+                variant="light"
+                className={styles.mobilePairBtn}
+                leftSection={<Smartphone size={14} />}
+                onClick={() => {
+                  setShowQr(true);
+                  setQrModalOpen(true);
+                }}
+              >
+                Devices
+              </Button>
+              <div className={styles.mobileAccountWrap}>
+                {renderAccountMenu(accountMenuMobileRef)}
+              </div>
             </div>
     </div>
         </header>
+
+        {(errorMsg || infoMsg) && (
+          <div className={styles.toastAnchor}>
+            <div
+              className={`${styles.floatingToast} ${
+                errorMsg ? styles.floatingToastError : styles.floatingToastInfo
+              }`}
+              role={errorMsg ? 'alert' : 'status'}
+              aria-live="polite"
+            >
+              {errorMsg ? (
+                <AlertCircle
+                  size={15}
+                  className={styles.floatingToastIconError}
+                  aria-hidden="true"
+                />
+              ) : (
+                <Sparkles
+                  size={15}
+                  className={styles.floatingToastIconInfo}
+                  aria-hidden="true"
+                />
+              )}
+              <span>{errorMsg ?? infoMsg}</span>
+              <button
+                type="button"
+                className={styles.floatingToastClose}
+                aria-label="Dismiss notification"
+                onClick={() => {
+                  setErrorMsg(null);
+                  setInfoMsg(null);
+                }}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          </div>
+        )}
 
         <div
           ref={streamRef}
@@ -2559,15 +2843,8 @@ export default function WorkspacePage() {
         {(filter === 'all' ||
           filter === 'file' ||
           filter === 'media' ||
-          errorMsg ||
           uploadStatus !== null) && (
           <div className={styles.composerDock}>
-            {errorMsg && (
-              <Alert color="red" withCloseButton onClose={() => setErrorMsg(null)}>
-                {errorMsg}
-              </Alert>
-            )}
-
             {uploadStatus !== null && (
               <div className={styles.uploadStatusCard} role="status" aria-live="polite">
                 <div className={styles.uploadStatusTop}>
@@ -2811,9 +3088,9 @@ export default function WorkspacePage() {
       </Modal>
 
       <Modal
-        opened={shortcutsOpen}
-        onClose={() => setShortcutsOpen(false)}
-        title="Keyboard shortcuts & tips"
+        opened={feedbackOpen}
+        onClose={() => setFeedbackOpen(false)}
+        title="Send feedback"
         centered
         classNames={{
           content: styles.darkModalContent,
@@ -2823,26 +3100,143 @@ export default function WorkspacePage() {
           body: styles.darkModalBody,
         }}
       >
-        <div className={styles.shortcutsList}>
-          <div className={styles.shortcutRow}>
-            <span>Paste text, links, or screenshots anywhere</span>
-            <kbd className={styles.shortcutKbd}>Ctrl / ⌘ + V</kbd>
+        {feedbackSent ? (
+          <p className={styles.modalConfirmCopy} style={{ color: '#5eead4' }}>
+            Thanks — your feedback has been sent!
+          </p>
+        ) : (
+          <div className={styles.modalStack}>
+            <div className={styles.feedbackPills} role="group" aria-label="Feedback category">
+              {(
+                [
+                  ['idea', 'Idea'],
+                  ['bug', 'Bug'],
+                  ['other', 'Other'],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`${styles.feedbackPill} ${
+                    feedbackCategory === key ? styles.feedbackPillActive : ''
+                  }`}
+                  onClick={() => setFeedbackCategory(key)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <textarea
+              className={styles.modalTextarea}
+              rows={4}
+              maxLength={2000}
+              placeholder="Tell us what's working, what broke, or what you'd love next…"
+              value={feedbackText}
+              onChange={(e) => setFeedbackText(e.currentTarget.value)}
+            />
+            <div className={styles.modalActions}>
+              <button
+                type="button"
+                className={styles.secondaryBtn}
+                onClick={() => setFeedbackOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className={styles.primaryBtn}
+                disabled={feedbackSubmitting || !feedbackText.trim()}
+                onClick={() => void handleSubmitFeedback()}
+              >
+                {feedbackSubmitting ? 'Sending…' : 'Send feedback'}
+              </button>
+            </div>
           </div>
-          <div className={styles.shortcutRow}>
-            <span>Send message from composer</span>
-            <kbd className={styles.shortcutKbd}>Enter</kbd>
+        )}
+      </Modal>
+
+      <Modal
+        opened={clearFeedOpen}
+        onClose={() => setClearFeedOpen(false)}
+        title="Clear all storage?"
+        centered
+        classNames={{
+          content: styles.darkModalContent,
+          header: styles.darkModalHeader,
+          title: styles.darkModalTitle,
+          close: styles.darkModalClose,
+          body: styles.darkModalBody,
+        }}
+      >
+        <div className={styles.modalStack}>
+          <p className={styles.modalConfirmCopy}>
+            This permanently deletes{' '}
+            {items.length === 1 ? 'the 1 item' : `all ${items.length} items`} and any encrypted
+            files from your storage. Your account and paired devices stay intact.
+          </p>
+          <div className={styles.modalActions}>
+            <button
+              type="button"
+              className={styles.secondaryBtn}
+              onClick={() => setClearFeedOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.dangerBtn}
+              disabled={clearingFeed}
+              onClick={() => void handleClearFeed()}
+            >
+              {clearingFeed ? 'Clearing…' : 'Clear all storage'}
+            </button>
           </div>
-          <div className={styles.shortcutRow}>
-            <span>Insert new line in composer</span>
-            <kbd className={styles.shortcutKbd}>Shift + Enter</kbd>
-          </div>
-          <div className={styles.shortcutRow}>
-            <span>Upload files or photos</span>
-            <kbd className={styles.shortcutKbd}>Drag &amp; drop</kbd>
-          </div>
-          <div className={styles.shortcutRow}>
-            <span>Close preview or modal</span>
-            <kbd className={styles.shortcutKbd}>Esc</kbd>
+        </div>
+      </Modal>
+
+      <Modal
+        opened={deleteAccountOpen}
+        onClose={() => setDeleteAccountOpen(false)}
+        title="Delete account"
+        centered
+        classNames={{
+          content: styles.darkModalContent,
+          header: styles.darkModalHeader,
+          title: styles.darkModalTitle,
+          close: styles.darkModalClose,
+          body: styles.darkModalBody,
+        }}
+      >
+        <div className={styles.modalStack}>
+          <p className={styles.modalConfirmCopy}>
+            This permanently deletes your account, all stored items and encrypted files in your
+            storage, paired devices, and local encryption keys. This cannot be undone.
+          </p>
+          <input
+            type="text"
+            className={styles.modalInput}
+            placeholder="Type DELETE to confirm"
+            value={deleteConfirmText}
+            onChange={(e) => setDeleteConfirmText(e.currentTarget.value)}
+          />
+          <div className={styles.modalActions}>
+            <button
+              type="button"
+              className={styles.secondaryBtn}
+              onClick={() => setDeleteAccountOpen(false)}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className={styles.dangerBtn}
+              disabled={
+                deletingAccount || deleteConfirmText.trim().toUpperCase() !== 'DELETE'
+              }
+              onClick={() => void handleDeleteAccount()}
+            >
+              {deletingAccount ? 'Deleting…' : 'Permanently delete'}
+            </button>
           </div>
         </div>
       </Modal>

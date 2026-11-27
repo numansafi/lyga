@@ -8,6 +8,7 @@ import {
   SESSION_COOKIE_NAME,
 } from '@/lib/mvp/session';
 import {
+  deleteWorkspaceAndAccount,
   getOrCreateUserWorkspace,
   getWorkspaceState,
 } from '@/lib/mvp/workspace-store';
@@ -81,5 +82,33 @@ export async function GET() {
   } catch (err) {
     console.error('[mvp workspace GET]', err);
     return NextResponse.json({ error: 'Unable to load workspace.' }, { status: 500 });
+  }
+}
+
+export async function DELETE() {
+  try {
+    const cookieStore = await cookies();
+    const auth = decodeAuthToken(cookieStore.get(AUTH_COOKIE_NAME)?.value);
+    const session = decodeSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    const deleted = await deleteWorkspaceAndAccount(
+      session.workspaceId,
+      session.deviceId,
+      auth?.userId ?? null
+    );
+    if (!deleted) {
+      return NextResponse.json({ error: 'Workspace not found.' }, { status: 404 });
+    }
+
+    const res = NextResponse.json({ ok: true });
+    res.cookies.delete(SESSION_COOKIE_NAME);
+    res.cookies.delete(AUTH_COOKIE_NAME);
+    return res;
+  } catch (err) {
+    console.error('[mvp workspace DELETE]', err);
+    return NextResponse.json({ error: 'Unable to delete account.' }, { status: 500 });
   }
 }
