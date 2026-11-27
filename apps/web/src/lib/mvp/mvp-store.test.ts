@@ -48,6 +48,7 @@ describe('mvp session & workspace-store', () => {
       addFeedItem,
       removeFeedItem,
       removeWorkspaceDevice,
+      renameWorkspaceDevice,
       updateFeedItem,
     } = await import('./workspace-store.ts');
     const { FREE_MAX_FILE_BYTES } = await import('./constants.ts');
@@ -137,6 +138,14 @@ describe('mvp session & workspace-store', () => {
     assert.equal(afterBulkDelete?.items.length, 0);
 
     if (paired2.ok) {
+      const renamed = await renameWorkspaceDevice(
+        workspace.id,
+        device.id,
+        paired2.device.id,
+        '  My iPhone 16  '
+      );
+      assert.deepEqual(renamed, { ok: true, label: 'My iPhone 16' });
+
       const removed = await removeWorkspaceDevice(workspace.id, device.id, paired2.device.id);
       assert.deepEqual(removed, { ok: true });
 

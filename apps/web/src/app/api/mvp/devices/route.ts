@@ -1,7 +1,47 @@
 import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
-import { removeWorkspaceDevice } from '@/lib/mvp/workspace-store';
+import { removeWorkspaceDevice, renameWorkspaceDevice } from '@/lib/mvp/workspace-store';
+
+export async function PATCH(req: Request) {
+  try {
+    const cookieStore = await cookies();
+    const session = decodeSessionToken(cookieStore.get(SESSION_COOKIE_NAME)?.value);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    const body = (await req.json().catch(() => null)) as {
+      id?: unknown;
+      label?: unknown;
+    } | null;
+
+    const targetDeviceId =
+      typeof body?.id === 'string' && body.id.trim() ? body.id.trim() : session.deviceId;
+    const label = typeof body?.label === 'string' ? body.label : '';
+
+    const result = await renameWorkspaceDevice(
+      session.workspaceId,
+      session.deviceId,
+      targetDeviceId,
+      label
+    );
+    if (!result.ok) {
+      if (result.reason === 'invalid') {
+        return NextResponse.json({ error: 'Device name is required.' }, { status: 400 });
+      }
+      if (result.reason === 'not_found') {
+        return NextResponse.json({ error: 'Device not found.' }, { status: 404 });
+      }
+      return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
+    }
+
+    return NextResponse.json({ ok: true, label: result.label });
+  } catch (err) {
+    console.error('[mvp devices PATCH]', err);
+    return NextResponse.json({ error: 'Unable to rename device.' }, { status: 500 });
+  }
+}
 
 export async function DELETE(req: Request) {
   try {

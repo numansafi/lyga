@@ -401,13 +401,66 @@
 .attachmentName {
   font-size: 14px;
   font-weight: 600;
-  word-break: break-word;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .attachmentSub {
   font-size: 11.5px;
   font-family: var(--font-mono), monospace;
   margin-top: 2px;
+  white-space: nowrap;
+}
+
+.bubbleIconRow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.bubbleIconBtn {
+  appearance: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(4, 22, 20, 0.45);
+  color: #e2f5f2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 120ms ease-out, background-color 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+
+.bubbleIconBtn:hover:not(:disabled) {
+  background: rgba(4, 22, 20, 0.72);
+  border-color: rgba(255, 255, 255, 0.24);
+}
+
+.bubbleIconBtn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+.bubbleIconBtnPrimary {
+  background: #5eead4;
+  color: #04221e;
+  border-color: transparent;
+  box-shadow: 0 2px 8px rgba(4, 34, 32, 0.28);
+}
+
+.bubbleIconBtnPrimary:hover:not(:disabled) {
+  background: #7df0dd;
+  border-color: transparent;
+}
+
+.bubbleIconBtn:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .bubbleOut .attachmentSub {
@@ -436,6 +489,13 @@
   color: rgba(240, 253, 250, 0.78);
 }
 
+.bubbleCluster {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: 100%;
+}
+
 .bubbleActions {
   display: inline-flex;
   align-items: center;
@@ -446,19 +506,21 @@
   border: 1px solid #1c4742;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
   opacity: 0;
+  pointer-events: none;
   transition: opacity 140ms ease;
   flex-shrink: 0;
 }
 
-.msgRow:hover .bubbleActions,
-.msgRow:focus-within .bubbleActions {
+.bubbleCluster:hover .bubbleActions,
+.msgRow:has(:focus-visible) .bubbleActions,
+.msgSelected .bubbleActions {
   opacity: 1;
+  pointer-events: auto;
 }
 
-@media (hover: none) {
-  .bubbleActions {
-    opacity: 1;
-  }
+.msgSelected .bubbleOut,
+.msgSelected .bubbleIn {
+  box-shadow: 0 0 0 2px #5eead4;
 }
 
 .actionIconBtn {
@@ -748,26 +810,6 @@
   display: none;
 }
 
-.attachNativeOverlay {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  z-index: 2;
-}
-
-.attachNativeOverlay:disabled {
-  cursor: not-allowed;
-  pointer-events: none;
-}
-
-.attachMenuWrap:has(.attachNativeOverlay:focus-visible) .attachBtn {
-  outline: 2px solid #5eead4;
-  outline-offset: 2px;
-}
-
 .dropOverlay {
   position: absolute;
   inset: 12px;
@@ -840,19 +882,105 @@
   gap: 0;
 }
 
+.railSearchBox {
+  flex: 1;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(94, 234, 212, 0.14);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  color: #84a9a1;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.railSearchBox:focus-within {
+  border-color: rgba(94, 234, 212, 0.45);
+  background: rgba(255, 255, 255, 0.06);
+  color: #ecfdf5;
+}
+
+.railSearchInput {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  color: #ecfdf5;
+  font-family: inherit;
+  font-size: 12.5px;
+}
+
+.railSearchInput::placeholder {
+  color: #84a9a1;
+}
+
 .railHeaderBar {
-  padding: 12px 16px;
+  padding: 14px 16px 2px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(94, 234, 212, 0.09);
+  gap: 10px;
   flex-shrink: 0;
 }
 
-.railHeaderTitle {
-  font-size: 12.5px;
-  font-weight: 650;
+.syncStatusPill {
+  appearance: none;
+  height: 30px;
+  padding: 0 11px;
+  border-radius: 999px;
+  background: rgba(52, 211, 153, 0.1);
+  border: 1px solid rgba(52, 211, 153, 0.25);
+  color: #6ee7b7;
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: default;
+}
+
+.syncStatusDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: #34d399;
+  flex-shrink: 0;
+}
+
+.syncStatusSingle {
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.28);
+  color: #fde68a;
+  cursor: pointer;
+}
+
+.syncStatusSingle .syncStatusDot {
+  background: #fbbf24;
+}
+
+.storageHeaderRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.storageTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #f0fdfa;
+}
+
+.storageSub {
+  font-size: 11.5px;
+  font-weight: 500;
   color: #84a9a1;
+  margin-top: 2px;
+  font-variant-numeric: tabular-nums;
 }
 
 .railSection {
@@ -908,7 +1036,7 @@
 
 .pinnedRow {
   appearance: none;
-  border: 0;
+  border: 1px solid rgba(94, 234, 212, 0.07);
   background: rgba(255, 255, 255, 0.025);
   border-radius: 10px;
   padding: 8px 10px;
@@ -922,11 +1050,16 @@
   color: #ecfdf5;
   cursor: pointer;
   text-align: left;
-  transition: background-color 140ms ease;
+  transition:
+    transform 150ms cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 140ms ease,
+    border-color 140ms ease;
 }
 
 .pinnedRow:hover {
   background: rgba(45, 212, 191, 0.09);
+  border-color: rgba(94, 234, 212, 0.24);
+  transform: translateX(2px);
 }
 
 .pinnedRowLabel {
@@ -977,6 +1110,63 @@
   border-color: rgba(94, 234, 212, 0.55);
 }
 
+.accountTriggerBtn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 8px 3px 3px;
+  border-radius: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease, border-color 140ms ease;
+}
+
+.accountTriggerBtn:hover {
+  background: rgba(19, 78, 70, 0.28);
+  border-color: rgba(94, 234, 212, 0.22);
+}
+
+.avatarSquircleInner {
+  width: 34px;
+  height: 34px;
+  border-radius: 11px;
+  background: linear-gradient(145deg, #134e46, #0b2f2a);
+  border: 1px solid rgba(94, 234, 212, 0.3);
+  color: #ecfdf5;
+  font-size: 13.5px;
+  font-weight: 750;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.accountTriggerMeta {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.2;
+}
+
+.accountTriggerName {
+  font-size: 12.5px;
+  font-weight: 650;
+  color: #f0fdfa;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
+.accountTriggerPlan {
+  font-size: 11px;
+  color: #7ea39e;
+  margin-top: 2px;
+}
+
 .accountPopover {
   position: absolute;
   top: calc(100% + 8px);
@@ -993,6 +1183,44 @@
   display: flex;
   flex-direction: column;
   gap: 9px;
+}
+
+.accountPopoverLeft {
+  left: 0;
+  right: auto;
+}
+
+.shortcutsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.shortcutRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: #cfe4e0;
+  padding: 6px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.shortcutRow:last-child {
+  border-bottom: 0;
+}
+
+.shortcutKbd {
+  flex-shrink: 0;
+  font-family: var(--font-mono), monospace;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #5eead4;
+  background: rgba(13, 46, 42, 0.9);
+  border: 1px solid rgba(94, 234, 212, 0.28);
+  border-radius: 7px;
+  padding: 3px 8px;
 }
 
 .accountPopHeader {
@@ -1062,7 +1290,7 @@
   display: none;
 }
 
-@media (max-width: 960px) {
+@media (max-width: 920px) {
   .mobileAccountWrap {
     display: inline-flex;
     align-items: center;
@@ -1465,9 +1693,20 @@
   gap: 2px;
 }
 
+@keyframes vaultBarGrow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .vaultSeg {
   height: 100%;
   border-radius: 999px;
+  transform-origin: left;
+  animation: vaultBarGrow 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   transition: width 220ms ease;
 }
 
@@ -1621,15 +1860,50 @@
   border: 1px solid #1c4742;
   background: #071e1b;
   color: rgba(204, 251, 241, 0.78);
-  padding: 4px 10px;
+  height: 28px;
+  padding: 0 11px;
   border-radius: 999px;
   font-size: 12px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   cursor: pointer;
   transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.viewSwitchGroup {
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 2px;
+  border-radius: 999px;
+  background: #071e1b;
+  border: 1px solid #1c4742;
+  gap: 2px;
+}
+
+.viewSwitchBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: rgba(204, 251, 241, 0.65);
+  width: 26px;
+  height: 22px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.viewSwitchBtn:hover {
+  color: #ecfdf5;
+}
+
+.viewSwitchBtnActive {
+  background: #115e59;
+  color: #ffffff;
 }
 
 .devicePillActive,
@@ -1815,10 +2089,49 @@
   }
 
   .messageStream {
-    padding: 16px 14px 20px;
+    padding: 14px 12px 18px;
+    gap: 8px;
     -webkit-overflow-scrolling: touch;
     overscroll-behavior-y: contain;
     scrollbar-width: none;
+  }
+
+  .bubbleOut,
+  .bubbleIn {
+    max-width: 86%;
+    padding: 8px 11px;
+    border-radius: 15px;
+  }
+
+  .bubbleCluster {
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .msgOut .bubbleCluster {
+    align-items: flex-end;
+  }
+
+  .msgIn .bubbleCluster {
+    align-items: flex-start;
+  }
+
+  .msgOut .bubbleActions {
+    order: 2;
+  }
+
+  .msgRow:not(.msgSelected) .bubbleActions {
+    display: none;
+  }
+
+  .attachmentCard {
+    gap: 8px;
+  }
+
+  .attachmentSub {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .messageStream::-webkit-scrollbar {
@@ -1835,6 +2148,23 @@
 
   :global(html[data-kb='open']) .composerDock {
     padding-bottom: 10px;
+  }
+
+  .attachPopover {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: auto;
+    border-radius: 22px;
+    padding: 8px;
+    z-index: 60;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.55);
+  }
+
+  .attachPopoverItem {
+    padding: 13px 14px;
+    font-size: 15px;
   }
 
   .composerInput,
@@ -2268,8 +2598,126 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #153b37;
+  padding: 7px 10px;
+  margin-top: 8px;
+  border-radius: 10px;
+  background: rgba(94, 234, 212, 0.08);
+  border: 1px solid rgba(94, 234, 212, 0.24);
+}
+
+.masterCheckPill {
+  appearance: none;
+  border: 1px solid #1c4742;
+  background: #0b2623;
+  color: #9fbab6;
+  border-radius: 999px;
+  padding: 5px 10px 5px 7px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 140ms ease, color 140ms ease, background-color 140ms ease;
+}
+
+.masterCheckPill:hover:not(:disabled) {
+  border-color: rgba(94, 234, 212, 0.45);
+  color: #f0fdfa;
+}
+
+.masterCheckPill:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.masterCheckPillActive {
+  border-color: rgba(94, 234, 212, 0.45);
+  background: rgba(94, 234, 212, 0.12);
+  color: #5eead4;
+}
+
+.itemCheckbox {
+  width: 17px;
+  height: 17px;
+  border-radius: 5px;
+  border: 1.5px solid rgba(255, 255, 255, 0.28);
+  background: rgba(7, 30, 27, 0.78);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: #04221e;
+  transition: background-color 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.itemCheckboxRound {
+  border-radius: 50%;
+}
+
+.itemCheckboxChecked {
+  background: #5eead4;
+  border-color: #5eead4;
+  color: #04221e;
+}
+
+.itemCheckboxIndeterminate {
+  background: rgba(94, 234, 212, 0.24);
+  border-color: #5eead4;
+  color: #5eead4;
+}
+
+.rowCheckBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0.48;
+  transition: opacity 120ms ease;
+}
+
+.groupRow:hover .rowCheckBtn,
+.groupRowSelected .rowCheckBtn,
+.rowCheckBtn:focus-visible {
+  opacity: 1;
+}
+
+.groupRowSelected {
+  background: rgba(94, 234, 212, 0.08);
+}
+
+.tileCheckBtn {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 2px;
+  position: absolute;
+  top: 7px;
+  left: 7px;
+  z-index: 2;
+  cursor: pointer;
+  opacity: 0;
+  transform: scale(0.92);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.mediaTile:hover .tileCheckBtn,
+.tileCheckBtnSelected,
+.tileCheckBtn:focus-visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+@media (hover: none), (max-width: 920px) {
+  .tileCheckBtn {
+    opacity: 0.72;
+    transform: scale(1);
+  }
 }
 
 .bulkCount {
@@ -2311,6 +2759,7 @@
 }
 
 .mediaTile {
+  position: relative;
   background: #0b2623;
   border: 1px solid #1c4742;
   border-radius: 14px;
