@@ -103,20 +103,33 @@ interface AnimatedMsgProps {
 
 function AnimatedMsg({ side, delayMs = 0, id, children }: AnimatedMsgProps) {
   const ref = useRef<HTMLDivElement>(null);
+  const [pending, setPending] = useState(false);
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+
+    const rect = el.getBoundingClientRect();
+    if (rect.top < window.innerHeight) {
+      setVisible(true);
+      return;
+    }
+
+    setPending(true);
 
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry?.isIntersecting) {
           setVisible(true);
+          setPending(false);
           observer.disconnect();
         }
       },
-      { threshold: 0.05, rootMargin: '0px 0px -40px 0px' }
+      { threshold: 0.01 }
     );
 
     observer.observe(el);
@@ -131,8 +144,8 @@ function AnimatedMsg({ side, delayMs = 0, id, children }: AnimatedMsgProps) {
       id={id}
       ref={ref}
       className={`${styles.msgRow} ${alignClass} ${animClass} ${
-        visible ? styles.msgVisible : ''
-      }`}
+        pending ? styles.animPending : ''
+      } ${visible ? styles.msgVisible : ''}`}
       style={{ transitionDelay: `${delayMs}ms` }}
     >
       {children}
