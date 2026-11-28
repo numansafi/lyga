@@ -9,6 +9,6 @@
     "test:e2e": "pnpm --filter @lyga/web test:e2e"
   },
   "devDependencies": {
-    "typescript": "^5.8.2"
+    "typescript": "^7.0.2"
   }
 }
