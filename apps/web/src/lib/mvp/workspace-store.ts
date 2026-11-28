@@ -958,3 +958,101 @@ export async function findWorkspaceByStripeCustomerId(
   const data = await readLocalData();
   return data.workspaces.find((w) => w.stripe_customer_id === customerId) ?? null;
 }
+
+export interface WorkspaceWrappedKeyRow {
+  wrappedWmk: string;
+  salt: string;
+  iv: string;
+  iterations: number;
+  kind: 'password' | 'passphrase';
+  fingerprint: string;
+}
+
+export async function getWorkspaceWrappedKey(
+  workspaceId: string
+): Promise<WorkspaceWrappedKeyRow | null> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select('wrapped_wmk, wmk_salt, wmk_iv, wmk_kdf_iterations, wmk_wrap_kind, wmk_fingerprint')
+      .eq('id', workspaceId)
+      .maybeSingle();
+    if (error) throw new Error(`Supabase wrapped key lookup error: ${error.message}`);
+    const row = data as Partial<WorkspaceRecord> | null;
+    if (!row?.wrapped_wmk || !row.wmk_salt || !row.wmk_iv || !row.wmk_kdf_iterations) {
+      return null;
+    }
+    return {
+      wrappedWmk: row.wrapped_wmk,
+      salt: row.wmk_salt,
+      iv: row.wmk_iv,
+      iterations: row.wmk_kdf_iterations,
+      kind: row.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+      fingerprint: row.wmk_fingerprint ?? '',
+    };
+  }
+
+  const data = await readLocalData();
+  const ws = data.workspaces.find((w) => w.id === workspaceId);
+  if (!ws?.wrapped_wmk || !ws.wmk_salt || !ws.wmk_iv || !ws.wmk_kdf_iterations) {
+    return null;
+  }
+  return {
+    wrappedWmk: ws.wrapped_wmk,
+    salt: ws.wmk_salt,
+    iv: ws.wmk_iv,
+    iterations: ws.wmk_kdf_iterations,
+    kind: ws.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+    fingerprint: ws.wmk_fingerprint ?? '',
+  };
+}
+
+export async function saveWorkspaceWrappedKey(
+  workspaceId: string,
+  input: WorkspaceWrappedKeyRow
+): Promise<{ ok: true } | { ok: false; reason: 'not_found' | 'fingerprint_mismatch' }> {
+  const patch: Partial<WorkspaceRecord> = {
+    wrapped_wmk: input.wrappedWmk,
+    wmk_salt: input.salt,
+    wmk_iv: input.iv,
+    wmk_kdf_iterations: input.iterations,
+    wmk_wrap_kind: input.kind,
+    wmk_fingerprint: input.fingerprint,
+  };
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data: existing, error: fetchErr } = await supabase
+      .from('workspaces')
+      .select('id, wrapped_wmk, wmk_fingerprint')
+      .eq('id', workspaceId)
+      .maybeSingle();
+    if (fetchErr) throw new Error(`Supabase wrapped key read error: ${fetchErr.message}`);
+    if (!existing) return { ok: false, reason: 'not_found' };
+    const row = existing as Pick<WorkspaceRecord, 'id' | 'wrapped_wmk' | 'wmk_fingerprint'>;
+    if (row.wrapped_wmk && row.wmk_fingerprint && row.wmk_fingerprint !== input.fingerprint) {
+      return { ok: false, reason: 'fingerprint_mismatch' };
+    }
+    const { error: updateErr } = await supabase
+      .from('workspaces')
+      .update(patch)
+      .eq('id', workspaceId);
+    if (updateErr) throw new Error(`Supabase wrapped key update error: ${updateErr.message}`);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const ws = data.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return { ok: false, reason: 'not_found' };
+    if (ws.wrapped_wmk && ws.wmk_fingerprint && ws.wmk_fingerprint !== input.fingerprint) {
+      return { ok: false, reason: 'fingerprint_mismatch' };
+    }
+    Object.assign(ws, patch);
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return { ok: true };
+  });
+}

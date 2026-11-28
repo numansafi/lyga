@@ -91,6 +91,18 @@ components:
     rounded: "{rounded.md}"
     padding: "0 16px"
     height: "44px"
+  button-primary-auth:
+    backgroundColor: "{colors.spruce-primary}"
+    textColor: "#ffffff"
+    rounded: "{rounded.md}"
+    padding: "10px 16px"
+    height: "44px"
+  button-secondary-auth:
+    backgroundColor: "#0b2623"
+    textColor: "#ffffff"
+    rounded: "{rounded.md}"
+    padding: "10px 14px"
+    height: "44px"
   button-primary-light:
     backgroundColor: "{colors.spruce-primary}"
     textColor: "{colors.light-bg-page}"
@@ -181,7 +193,7 @@ The palette uses a focused Spruce-to-Mint accent spectrum over neutral light-fro
 ## Layout
 
 - **Landing (`/`):** Centered `1040px` hero stage and `900px` floating pill header (`56px` height) with `24px` horizontal padding (`16px` on mobile). Sections alternate cleanly between deep-spruce hero gradient and crisp white/frost sections.
-- **Auth (`/login`, `/auth/callback`):** Full-viewport `100dvh` centered grid (`padding: 24px 16px`). `/login` uses an `820px` 2-column split (`1.08fr` form / `0.92fr` QR panel) collapsing to 1 column on mobile; `/auth/callback` uses a focused `440px` card.
+- **Auth (`/login`, `/auth/callback`):** Full-viewport `100dvh` centered grid (`env(safe-area-inset-*)` padded). `/login` uses an `820px` 2-column split (`1.08fr` form / `0.92fr` QR panel) collapsing to a `440px` 1-column card on `<= 760px` (where QR polling is disabled), with `44×44px` minimum touch targets under `@media (pointer: coarse), (max-width: 760px)`. `/auth/callback` uses a focused `440px` card.
 - **Workspace (`/app`):** Full-height `var(--app-height, 100dvh)` 2-column grid (`minmax(0, 1fr) 332px` on desktop, `290px` rail on `921px–1120px`, single column on `<= 920px` with `Devices` + account button in the top-right header and full-width filter strip below).
 
 ## Elevation & Depth
@@ -204,7 +216,9 @@ Lyga uses **tonal layering + translucent glass** over deep shadows:
 
 ### Buttons
 - **Shape:** `12px` radius (`44px` height) for form CTAs; `9999px` pill for header/action chips.
-- **Primary (Dark App/Auth):** Electric Mint (`#5eead4`) background, `#042220` text, `font-weight: 700`. Hover shifts to `#99f6e4` with soft mint glow; active scales to `0.985`.
+- **Primary (Dark App, e.g. composer):** Electric Mint (`#5eead4`) background, `#042220` text, `font-weight: 700`. Hover shifts to `#99f6e4` with soft mint glow; active scales to `0.985`.
+- **Primary (Auth, `/login`):** Deep Spruce (`#115e59`) background, `#ffffff` text, `1px solid rgba(94, 234, 212, 0.35)` border, `font-weight: 700`. Hover shifts to `#0d4743` with a brighter `0.55` border; active scales to `0.985`; disabled drops to `0.65` opacity. Built as a native `<button>` (`AuthSubmitButton`), with no `!important` overrides of Mantine.
+- **Secondary (Auth, Continue with Google):** `#0b2623` fill, `1px solid rgba(94, 234, 212, 0.24)` border, `#ffffff` text, four-color Google `G`; hover `#10332f` with a `0.48` border. It stays visually quieter than the primary submit so the form action leads.
 - **Primary (Light Marketing):** Deep Spruce (`#115e59`) background, `#ffffff` text; hover `#0d4743`.
 - **Secondary / Ghost:** `rgba(255, 255, 255, 0.05)` fill with `1px solid rgba(255, 255, 255, 0.14)` border.
 
@@ -218,7 +232,7 @@ Lyga uses **tonal layering + translucent glass** over deep shadows:
 - **Border:** `1px solid rgba(94, 234, 212, 0.18)` on dark; `1px solid #e5e7eb` on light.
 
 ### Inputs / Fields
-- **Style:** `44px` height, `12px` radius, `#051917` background, `1px solid rgba(94, 234, 212, 0.24)` border, muted grey placeholder (`rgba(148, 163, 184, 0.42)`).
+- **Style:** `44px` height, `12px` radius, `#051917` background, `1px solid rgba(94, 234, 212, 0.24)` border, muted mint placeholder (`rgba(204, 251, 241, 0.56)`).
 - **Focus:** `#5eead4` border with `0 0 0 3px rgba(94, 234, 212, 0.14)` ring.
 - **Error:** Coral border (`rgba(248, 113, 113, 0.72)`) with inline `#fca5a5` message directly below the field.
 
@@ -233,6 +247,7 @@ Lyga uses **tonal layering + translucent glass** over deep shadows:
 - **Do** render field validation errors inline below the offending input (`aria-invalid="true"`) with `noValidate` on forms.
 - **Do** separate destructive actions (`Clear all storage`, `Delete account`) into a bottom `Danger zone` away from neutral `Sign out`.
 - **Do** keep `16px` minimum font size on mobile inputs (`<= 920px`).
+- **Do** keep form `<p role="alert">` error messages outside `<label>` inside a `.fieldGroup` (`<label htmlFor>` + sibling `<input>` + error) so screen-reader accessible names stay clean.
 
 ### Don't:
 - **Don't** add Tailwind CSS anywhere in `apps/web`.

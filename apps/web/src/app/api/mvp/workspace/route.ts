@@ -10,6 +10,23 @@ import {
   getWorkspaceState,
 } from '@/lib/mvp/workspace-store';
 
+function sanitizeWorkspace(workspace: Awaited<ReturnType<typeof getOrCreateUserWorkspace>>['workspace']) {
+  const {
+    wrapped_wmk,
+    wmk_salt: _salt,
+    wmk_iv: _iv,
+    wmk_kdf_iterations: _iter,
+    wmk_wrap_kind,
+    wmk_fingerprint: _fp,
+    ...rest
+  } = workspace;
+  return {
+    ...rest,
+    hasWrappedKey: Boolean(wrapped_wmk),
+    wmkWrapKind: wmk_wrap_kind ?? null,
+  };
+}
+
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -34,6 +51,7 @@ export async function GET() {
         }
         return NextResponse.json({
           ...state,
+          workspace: sanitizeWorkspace(state.workspace),
           userEmail,
           deviceId: session.deviceId,
         });
@@ -54,7 +72,7 @@ export async function GET() {
 
     const result = await getOrCreateUserWorkspace(auth.userId, 'Desktop Browser');
     const res = NextResponse.json({
-      workspace: result.workspace,
+      workspace: sanitizeWorkspace(result.workspace),
       devices: result.devices,
       items: result.items,
       usedBytes: result.usedBytes,

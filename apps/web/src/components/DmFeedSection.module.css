@@ -972,3 +972,13 @@
   color: var(--text-primary);
   letter-spacing: 0.03em;
 }
+
+.siteFooterLink {
+  color: var(--accent-primary);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.siteFooterLink:hover {
+  text-decoration: underline;
+}

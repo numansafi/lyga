@@ -70,4 +70,47 @@ describe('mvp webcrypto E2EE', () => {
     // Rejects truncated frame bytes
     await assert.rejects(() => decryptFileFrameV2(fileAKey, frame0.subarray(0, frame0.length - 1), 0, 2));
   });
+
+  it('wraps/unwraps wmk with PBKDF2 + workspaceId AAD and supports ECDH P-256 approval', async () => {
+    const {
+      generateWorkspaceKey,
+      wrapWorkspaceKey,
+      unwrapWorkspaceKey,
+      generateApprovalKeyPair,
+      deriveShortVerificationCode,
+      encryptWmkForPublicKey,
+      decryptWmkFromApproval,
+    } = await import('./crypto.ts');
+
+    const wmk = generateWorkspaceKey();
+    const wrapped = await wrapWorkspaceKey(wmk, 'strong-pass-123', 'ws_123', 'password', 1000);
+    assert.equal(wrapped.kind, 'password');
+    assert.notEqual(wrapped.wrappedWmk, wmk);
+
+    const unwrapped = await unwrapWorkspaceKey(wrapped, 'strong-pass-123', 'ws_123');
+    assert.equal(unwrapped, wmk);
+
+    await assert.rejects(() => unwrapWorkspaceKey(wrapped, 'wrong-pass-123', 'ws_123'));
+    await assert.rejects(() => unwrapWorkspaceKey(wrapped, 'strong-pass-123', 'ws_other'));
+
+    const recipient = await generateApprovalKeyPair();
+    const codeA = await deriveShortVerificationCode(recipient.publicKeyB64, 'appr_1');
+    const codeB = await deriveShortVerificationCode(recipient.publicKeyB64, 'appr_1');
+    assert.equal(codeA, codeB);
+    assert.match(codeA, /^\d{4}$/);
+
+    const cipher = await encryptWmkForPublicKey(wmk, recipient.publicKeyB64, 'appr_1');
+    const recovered = await decryptWmkFromApproval(cipher, recipient.privateKey, 'appr_1');
+    assert.equal(recovered, wmk);
+    await assert.rejects(() => decryptWmkFromApproval(cipher, recipient.privateKey, 'appr_2'));
+
+    const { validateSyncPin, derivePinHash, combinePinWithPepper } = await import('./crypto.ts');
+    assert.ok(validateSyncPin('12345'));
+    assert.ok(validateSyncPin('123456'));
+    assert.ok(validateSyncPin('000000'));
+    assert.equal(validateSyncPin('482915'), null);
+    const pinHash = await derivePinHash('482915', 'ws_123');
+    assert.notEqual(pinHash, '482915');
+    assert.equal(combinePinWithPepper('482915', 'pep'), '482915:pep');
+  });
 });

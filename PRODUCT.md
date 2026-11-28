@@ -29,13 +29,14 @@ Lyga ("DM yourself the important stuff") turns cross-device file transfer and pe
   - `/auth/callback` — OAuth/OTP callback and cross-device email confirmation screen.
   - `/app` — Main encrypted workspace feed, device pairing & management, storage meter, `.HEIC`/media/code preview, and `.zip` export.
   - `/pair` & `/qr-approve` — QR pairing and cross-device approval routes.
+  - `/privacy` & `/terms` — Public legal policies linked from the footer.
 - **Tech stack:** Next.js 15 App Router, React 19, TypeScript, Mantine Core, CSS Modules, Supabase (Auth/Postgres/Storage), local dev filesystem fallback (`.lyga-dev-data`).
 
 ## Capabilities and Constraints
 
 - **Plan limits (confirmed):**
   - **Starter (Free):** £0/mo, 250 MB max file, 1 GB active rolling storage, 3-day file expiry, up to 2 paired devices, unlimited text/links/code snippets.
-  - **Pro Founder Spot:** £5/mo (early bird vs £8/mo), 5 GB max file, 100 GB persistent vault (no 7-day expiry), up to 5 paired devices, expiring public Drop Links, 1-click HEIC-to-JPG conversion. *(Pro billing and Drop Links are currently marked "coming soon" and not yet live.)*
+  - **Pro Founder Spot:** £5/mo (early bird vs £8/mo), 5 GB max file, 100 GB persistent vault (no 7-day expiry), up to 5 paired devices, expiring public Drop Links, 1-click HEIC-to-JPG conversion. *(Pro billing via Stripe is live.)*
 - **Technical constraints:**
   - CSS Modules + Mantine Core only (no Tailwind CSS in `apps/web`).
   - Client-side E2EE invariant: plaintext notes, filenames, and file bytes must never be sent to or logged by the server.
@@ -56,7 +57,7 @@ Lyga ("DM yourself the important stuff") turns cross-device file transfer and pe
 1. **Feel like texting yourself:** Keep capture and retrieval as fast and low-friction as sending a message.
 2. **Zero quality loss:** Never silently compress or alter original user files (preserve raw bytes on download/export).
 3. **Private by architecture:** Encrypt before upload and keep keys on paired devices.
-4. **Honest scope:** Clearly label unshipped Pro features as coming soon rather than faking availability.
+4. **Honest scope:** Clearly distinguish shipped features from roadmap capabilities without fabricating claims.
 
 ## Accessibility & Inclusion
 
