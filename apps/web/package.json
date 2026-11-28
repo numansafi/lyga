@@ -14,7 +14,7 @@
     "@aws-sdk/client-s3": "^3.1177.0",
     "@aws-sdk/s3-request-presigner": "^3.1177.0",
     "@mantine/core": "^7.17.3",
-    "@mantine/hooks": "^7.17.3",
+    "@mantine/hooks": "^9.8.2",
     "@sentry/nextjs": "^11.19.0",
     "@supabase/supabase-js": "^2.49.4",
     "heic2any": "^0.0.4",
