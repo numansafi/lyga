@@ -148,6 +148,31 @@
   line-height: 1.4;
 }
 
+.otpSubtitle {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: #ffffff;
+}
+
+.otpSubtitle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.otpSubtitle svg {
+  color: #5eead4;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.otpSubtitle strong {
+  color: #ffffff;
+  font-weight: 600;
+}
+
 .floatingInfoToast {
   position: fixed;
   top: max(20px, env(safe-area-inset-top));

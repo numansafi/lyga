@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, type ClipboardEvent, type KeyboardEvent, type ReactNode, type RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader } from '@mantine/core';
 import { ChevronDown, Lock, RefreshCw, X } from 'lucide-react';
@@ -23,10 +23,10 @@ export function formatAuthError(raw: string | undefined | null, fallback: string
     return 'Please confirm your email address using the link we sent you before signing in.';
   }
   if (lower.includes('already registered') || lower.includes('already exists')) {
-    return 'An account with this email already exists. Sign in or use Email code.';
+    return 'An account with this email already exists. Sign in instead.';
   }
   if (lower.includes('token has expired') || lower.includes('otp_expired') || lower.includes('invalid token')) {
-    return 'That code is invalid or expired. Request a fresh 6-digit code and try again.';
+    return 'That link is invalid or expired. Request a new one and try again.';
   }
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('security purposes')) {
     return 'Too many attempts right now. Wait a moment and try again.';
@@ -218,10 +218,6 @@ export function TroubleSigningInHelp() {
         <p>
           <strong>Forgot your password?</strong> Use <em>Forgot password?</em> above to receive a
           reset link, or scan the QR code from a signed-in device.
-        </p>
-        <p>
-          <strong>Your files stay private.</strong> Only your devices and password hold the key, so
-          we can never read what you send.
         </p>
       </div>
     </details>

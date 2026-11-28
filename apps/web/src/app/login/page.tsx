@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, Mail } from 'lucide-react';
 import { validateAuthEmail } from '@/lib/email-validation';
 import {
   generateWorkspaceKey,
@@ -46,6 +46,7 @@ export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowser();
   const [isSignUp, setIsSignUp] = useState(false);
+  const [pendingConfirmEmail, setPendingConfirmEmail] = useState<string | null>(null);
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -344,9 +345,10 @@ export default function LoginPage() {
             await supabase.auth.signOut().catch(() => undefined);
           }
           setIsSignUp(false);
+          setFullName('');
           setPassword('');
           setConfirmPassword('');
-          setInfoMsg('Account created! Check your email to confirm, then sign in.');
+          setPendingConfirmEmail(check.normalized);
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -395,19 +397,81 @@ export default function LoginPage() {
           </div>
 
           <h1 className={styles.title}>
-            {supabase
-              ? isSignUp
-                ? 'Create a new account'
-                : 'Sign in to Lyga'
-              : 'Sign in to Lyga'}
+            {pendingConfirmEmail
+              ? 'Check your email'
+              : supabase
+                ? isSignUp
+                  ? 'Create a new account'
+                  : 'Sign in to Lyga'
+                : 'Sign in to Lyga'}
           </h1>
-          {requestedPlan === 'pro' && (
+          {requestedPlan === 'pro' && !pendingConfirmEmail && (
             <p className={styles.planNotice}>
               Sign in to continue with Lyga Pro (Founder Rate).
             </p>
           )}
 
-        {supabase ? (
+        {pendingConfirmEmail && supabase ? (
+              <form
+                className={styles.form}
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void (async () => {
+                    setErrorMsg(null);
+                    setSecondaryLoading(true);
+                    try {
+                      const { error } = await supabase.auth.resend({
+                        type: 'signup',
+                        email: pendingConfirmEmail,
+                        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+                      });
+                      if (error) {
+                        setErrorMsg(formatAuthError(error.message, 'Unable to resend confirmation email.'));
+                      } else {
+                        setInfoMsg(`Sent a new confirmation link to ${pendingConfirmEmail}.`);
+                      }
+                    } catch (err) {
+                      setErrorMsg(
+                        formatAuthError(
+                          err instanceof Error ? err.message : null,
+                          'Unable to resend confirmation email.'
+                        )
+                      );
+                    } finally {
+                      setSecondaryLoading(false);
+                    }
+                  })();
+                }}
+              >
+                <div className={styles.otpSubtitle}>
+                  <Mail size={16} aria-hidden="true" />
+                  <span>
+                    We sent a confirmation link to <strong>{pendingConfirmEmail}</strong>. Open the
+                    link in your email to activate your account, then sign in.
+                  </span>
+                </div>
+                {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
+                <AuthSubmitButton loading={secondaryLoading} disabled={secondaryLoading}>
+                  Resend confirmation email
+                </AuthSubmitButton>
+                <div className={styles.authSwitchRow}>
+                  <button
+                    type="button"
+                    className={styles.linkBtn}
+                    disabled={secondaryLoading}
+                    onClick={() => {
+                      setEmail(pendingConfirmEmail);
+                      setPendingConfirmEmail(null);
+                      setIsSignUp(false);
+                      setErrorMsg(null);
+                      setInfoMsg(null);
+                    }}
+                  >
+                    Back to sign in
+                  </button>
+                </div>
+              </form>
+        ) : supabase ? (
               <form
                 key={isSignUp ? 'signup' : 'signin'}
                 className={styles.form}
