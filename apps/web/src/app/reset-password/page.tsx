@@ -7,7 +7,12 @@ import { Button } from '@mantine/core';
 import { Check, Eye, EyeOff, Lock, X } from 'lucide-react';
 import { wrapWorkspaceKey } from '@/lib/mvp/crypto';
 import { getWorkspaceKey } from '@/lib/mvp/key-store';
+import {
+  PASSWORD_REQUIREMENTS_HINT,
+  validateStrongPassword,
+} from '@/lib/password-validation';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import { formatAuthError } from '../login/LoginFields';
 import loginStyles from '../login/Login.module.css';
 import callbackStyles from '../auth/callback/Callback.module.css';
 
@@ -30,8 +35,9 @@ export default function ResetPasswordPage() {
     if (!supabase) return;
     setErrorMsg(null);
     const nextErrors: { password?: string; confirm?: string } = {};
-    if (password.length < 6) {
-      nextErrors.password = 'Password must be at least 6 characters.';
+    const pwCheck = validateStrongPassword(password);
+    if (!pwCheck.valid) {
+      nextErrors.password = pwCheck.error;
     }
     if (confirmPassword !== password) {
       nextErrors.confirm = 'Passwords do not match.';
@@ -48,7 +54,7 @@ export default function ResetPasswordPage() {
     try {
       const { error } = await supabase.auth.updateUser({ password });
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(formatAuthError(error.message, 'Unable to update password.'));
         return;
       }
       try {
@@ -154,10 +160,12 @@ export default function ResetPasswordPage() {
                     {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                 </div>
-                {fieldErrors.password && (
+                {fieldErrors.password ? (
                   <p id="reset-pw-error" className={loginStyles.fieldError} role="alert">
                     {fieldErrors.password}
                   </p>
+                ) : (
+                  <p className={loginStyles.fieldHint}>{PASSWORD_REQUIREMENTS_HINT}</p>
                 )}
               </label>
 

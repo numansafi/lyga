@@ -8,7 +8,7 @@
     "start": "next start",
     "typecheck": "tsc --noEmit",
     "test:e2e": "playwright test",
-    "test": "node --test src/lib/local-json-store.test.ts src/lib/email-validation.test.ts src/lib/sentry-scrub.test.ts src/lib/mvp/mvp-store.test.ts src/lib/mvp/crypto.test.ts src/lib/mvp/blob-store.test.ts src/lib/mvp/qr-login-store.test.ts src/lib/mvp/device-approve-store.test.ts src/lib/mvp/pin-pepper.test.ts src/lib/mvp/qr-crypto.test.ts src/lib/mvp/zip.test.ts src/lib/mvp/events.test.ts src/lib/mvp/key-store.test.ts src/lib/mvp/feed-selectors.test.ts src/lib/mvp/api-context.test.ts"
+    "test": "node --test src/lib/local-json-store.test.ts src/lib/email-validation.test.ts src/lib/password-validation.test.ts src/lib/sentry-scrub.test.ts src/lib/mvp/mvp-store.test.ts src/lib/mvp/crypto.test.ts src/lib/mvp/blob-store.test.ts src/lib/mvp/qr-login-store.test.ts src/lib/mvp/device-approve-store.test.ts src/lib/mvp/pin-pepper.test.ts src/lib/mvp/qr-crypto.test.ts src/lib/mvp/zip.test.ts src/lib/mvp/events.test.ts src/lib/mvp/key-store.test.ts src/lib/mvp/feed-selectors.test.ts src/lib/mvp/api-context.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1177.0",

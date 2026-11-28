@@ -7,6 +7,10 @@ import { Loader } from '@mantine/core';
 import { Eye, EyeOff, Mail } from 'lucide-react';
 import { validateAuthEmail } from '@/lib/email-validation';
 import {
+  PASSWORD_REQUIREMENTS_HINT,
+  validateStrongPassword,
+} from '@/lib/password-validation';
+import {
   generateWorkspaceKey,
   unwrapWorkspaceKey,
   wrapWorkspaceKey,
@@ -91,7 +95,7 @@ export default function LoginPage() {
     if (stored) {
       setEmail(stored.email);
       setOtpSent(true);
-      setInfoMsg(`Enter the 6-digit code we sent to ${stored.email}.`);
+      setInfoMsg(`Enter the code we sent to ${stored.email}.`);
       const remaining = remainingCooldown(stored.sentAt);
       if (remaining > 0) setOtpCooldown(remaining);
     }
@@ -265,7 +269,7 @@ export default function LoginPage() {
       }
       setOtpSent(true);
       setOtpCooldown(OTP_COOLDOWN_SECONDS);
-      setInfoMsg(`Enter the 6-digit code we sent to ${cleanEmail}.`);
+      setInfoMsg(`Enter the code we sent to ${cleanEmail}.`);
       saveOtpState(cleanEmail);
     } catch {
       setErrorMsg('Unable to send sign-in email.');
@@ -307,7 +311,7 @@ export default function LoginPage() {
         return;
       }
       setOtpCooldown(OTP_COOLDOWN_SECONDS);
-      setInfoMsg(`Sent a fresh 6-digit code to ${check.normalized}.`);
+      setInfoMsg(`Sent a new code to ${check.normalized}.`);
       saveOtpState(check.normalized);
     } catch {
       setErrorMsg('Unable to resend sign-in email.');
@@ -321,8 +325,8 @@ export default function LoginPage() {
     if (!supabase) return;
     setErrorMsg(null);
     const cleanCode = otpCode.trim();
-    if (cleanCode.length !== 6) {
-      setFieldErrors({ otp: 'Enter the 6-digit code from your email.' });
+    if (cleanCode.length < 6 || cleanCode.length > 8) {
+      setFieldErrors({ otp: 'Enter the 6–8 digit code from your email.' });
       otpInputRef.current?.focus();
       return;
     }
@@ -361,10 +365,15 @@ export default function LoginPage() {
 
   const handlePasswordBlur = () => {
     if (!password) return;
-    setFieldErrors((prev) => ({
-      ...prev,
-      password: password.length < 6 ? 'Password must be at least 6 characters.' : undefined,
-    }));
+    if (isSignUp) {
+      const pwCheck = validateStrongPassword(password);
+      setFieldErrors((prev) => ({
+        ...prev,
+        password: pwCheck.valid ? undefined : pwCheck.error,
+      }));
+    } else {
+      setFieldErrors((prev) => ({ ...prev, password: undefined }));
+    }
   };
 
   const handleForgotPassword = async () => {
@@ -410,8 +419,13 @@ export default function LoginPage() {
     if (!check.valid) {
       nextErrors.email = check.error ?? 'Please enter a valid email address.';
     }
-    if (password.length < 6) {
-      nextErrors.password = 'Password must be at least 6 characters.';
+    if (isSignUp) {
+      const pwCheck = validateStrongPassword(password);
+      if (!pwCheck.valid) {
+        nextErrors.password = pwCheck.error;
+      }
+    } else if (!password) {
+      nextErrors.password = 'Enter your password.';
     }
     if (nextErrors.email || nextErrors.password) {
       setFieldErrors(nextErrors);
@@ -571,7 +585,7 @@ export default function LoginPage() {
                 if (nextMode === 'otp' && otpSent) {
                   const check = validateAuthEmail(email);
                   const target = check.valid ? check.normalized : email.trim().toLowerCase();
-                  setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
+                  setInfoMsg(`Enter the code we sent to ${target}.`);
                 } else {
                   setInfoMsg(null);
                 }
@@ -596,7 +610,7 @@ export default function LoginPage() {
                   if (otpSent) {
                     const check = validateAuthEmail(email);
                     const target = check.valid ? check.normalized : email.trim().toLowerCase();
-                    setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
+                    setInfoMsg(`Enter the code we sent to ${target}.`);
                   } else {
                     setInfoMsg(null);
                   }
@@ -642,7 +656,7 @@ export default function LoginPage() {
                   )}
                   <div className={styles.fieldGroup}>
                     <label htmlFor="login-otp-code" className={styles.label}>
-                      6-digit code from email
+                      Code from email
                     </label>
                     <input
                       id="login-otp-code"
@@ -650,14 +664,14 @@ export default function LoginPage() {
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
-                      maxLength={6}
+                      maxLength={8}
                       aria-invalid={Boolean(fieldErrors.otp)}
                       aria-describedby={fieldErrors.otp ? 'login-otp-error' : undefined}
                       className={`${styles.input} ${styles.otpInput} ${fieldErrors.otp ? styles.inputError : ''}`}
-                      placeholder="123456"
+                      placeholder="12345678"
                       value={otpCode}
                       onChange={(e) => {
-                        setOtpCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 6));
+                        setOtpCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 8));
                         if (fieldErrors.otp) setFieldErrors((prev) => ({ ...prev, otp: undefined }));
                         if (errorMsg) setErrorMsg(null);
                       }}
@@ -801,7 +815,7 @@ export default function LoginPage() {
                     </p>
                   ) : isSignUp ? (
                     <p id="login-password-hint" className={styles.fieldHint}>
-                      At least 6 characters
+                      {PASSWORD_REQUIREMENTS_HINT}
                     </p>
                   ) : null}
                 </div>
