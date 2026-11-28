@@ -28,6 +28,7 @@ test.describe('Authenticated Workspace E2EE Flow (/app)', () => {
       data: { devEmail: `e2e-${Date.now()}@lyga.app` },
     });
     expect(authRes.status()).toBe(200);
+    consoleErrors.length = 0;
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/app');

@@ -1,6 +1,7 @@
 'use client';
 
 import { Accordion } from '@mantine/core';
+import { PLANS } from '@/lib/pricingplan';
 import styles from './FaqSection.module.css';
 
 const FAQS = [
@@ -18,9 +19,9 @@ const FAQS = [
   },
   {
     value: 'expiry',
-    question: 'What happens to Free files after 7 days?',
+    question: `What happens to Free files after ${PLANS.free.expiryLabel}?`,
     answer:
-      'Free files expire automatically after 7 days to keep storage lean. Text, links, and code snippets stay, and Pro keeps files in a 100 GB persistent vault.',
+      `Free files expire automatically after ${PLANS.free.expiryLabel} to keep storage lean. Text, links, and code snippets stay, and ${PLANS.pro.shortName} keeps files in a ${PLANS.pro.maxStorageLabel} persistent vault.`,
   },
   {
     value: 'billing',

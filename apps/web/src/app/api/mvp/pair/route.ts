@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
-import { mapStoreError, setSessionCookie } from '@/lib/mvp/api-context';
+import { checkRateLimit, mapStoreError, setSessionCookie } from '@/lib/mvp/api-context';
 import { pairDeviceByCode } from '@/lib/mvp/workspace-store';
 
 export async function POST(req: Request) {
+  if (!checkRateLimit(req, 'pair', 15, 60_000)) {
+    return NextResponse.json({ error: 'Too many pairing attempts. Try again shortly.' }, { status: 429 });
+  }
   try {
     const body = (await req.json().catch(() => null)) as { code?: unknown; label?: unknown } | null;
     const code = typeof body?.code === 'string' ? body.code.trim() : '';

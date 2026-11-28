@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
-import { setSessionCookie } from '@/lib/mvp/api-context';
+import { checkRateLimit, setSessionCookie } from '@/lib/mvp/api-context';
 import {
   createQrLoginChallenge,
   pollQrLoginChallenge,
 } from '@/lib/mvp/qr-login-store';
 import { pairDeviceByCode } from '@/lib/mvp/workspace-store';
 
-export async function POST() {
+export async function POST(req: Request) {
+  if (!checkRateLimit(req, 'qr-login', 20, 60_000)) {
+    return NextResponse.json({ error: 'Too many QR requests. Try again shortly.' }, { status: 429 });
+  }
   try {
     const challenge = await createQrLoginChallenge();
     return NextResponse.json(challenge);

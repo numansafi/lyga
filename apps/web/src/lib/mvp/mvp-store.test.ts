@@ -179,4 +179,90 @@ describe('mvp session & workspace-store', () => {
     assert.notEqual(first.deviceId, second.deviceId);
     assert.equal(second.devices.length, 2);
   });
+
+  it('upgrades and downgrades workspace plan limits and resolves Stripe customer IDs', async () => {
+    const {
+      createWorkspaceWithDevice,
+      findWorkspaceByStripeCustomerId,
+      getWorkspaceState,
+      setWorkspacePlan,
+    } = await import('./workspace-store.ts');
+    const { getWorkspaceLimits } = await import('./constants.ts');
+
+    const { workspace, device } = await createWorkspaceWithDevice('Mac');
+    assert.equal(getWorkspaceLimits(workspace).plan, 'free');
+
+    const ok = await setWorkspacePlan(workspace.id, {
+      plan: 'pro',
+      stripeCustomerId: 'cus_test_123',
+      stripeSubscriptionId: 'sub_test_123',
+      subscriptionStatus: 'active',
+    });
+    assert.equal(ok, true);
+
+    const proState = await getWorkspaceState(workspace.id, device.id);
+    assert.equal(proState?.workspace.plan, 'pro');
+    assert.equal(proState?.workspace.max_devices, 5);
+    assert.equal(getWorkspaceLimits(proState?.workspace).expiryDays, null);
+
+    const byCustomer = await findWorkspaceByStripeCustomerId('cus_test_123');
+    assert.equal(byCustomer?.id, workspace.id);
+
+    await setWorkspacePlan(workspace.id, {
+      plan: 'free',
+      subscriptionStatus: 'canceled',
+    });
+    const freeState = await getWorkspaceState(workspace.id, device.id);
+    assert.equal(freeState?.workspace.plan, 'free');
+    assert.equal(freeState?.workspace.max_devices, 2);
+  });
+
+  it('enforces upload session ownership, quota reservations, and max 3 concurrent uploads', async () => {
+    const {
+      createWorkspaceWithDevice,
+      releaseUploadQuota,
+      reserveUploadQuota,
+      verifyUploadSession,
+    } = await import('./workspace-store.ts');
+
+    const wsA = await createWorkspaceWithDevice('Phone A');
+    const wsB = await createWorkspaceWithDevice('Phone B');
+
+    const r1 = await reserveUploadQuota(wsA.workspace.id, wsA.device.id, 'ws_blob_1_abcdefgh', 'up_1', 100 * 1024 * 1024, 7);
+    assert.deepEqual(r1, { ok: true });
+
+    // Cross-workspace ownership check must fail for wsB
+    assert.deepEqual(await verifyUploadSession(wsB.workspace.id, 'ws_blob_1_abcdefgh', 'up_1'), { ok: false });
+    assert.deepEqual(await verifyUploadSession(wsA.workspace.id, 'ws_blob_1_abcdefgh', 'up_1'), { ok: true, totalParts: 7 });
+
+    // 2 more concurrent uploads allowed (total 3), 4th rejected
+    assert.deepEqual(await reserveUploadQuota(wsA.workspace.id, wsA.device.id, 'ws_blob_2_abcdefgh', 'up_2', 50 * 1024 * 1024, 4), { ok: true });
+    assert.deepEqual(await reserveUploadQuota(wsA.workspace.id, wsA.device.id, 'ws_blob_3_abcdefgh', 'up_3', 50 * 1024 * 1024, 4), { ok: true });
+    assert.deepEqual(
+      await reserveUploadQuota(wsA.workspace.id, wsA.device.id, 'ws_blob_4_abcdefgh', 'up_4', 50 * 1024 * 1024, 4),
+      { ok: false, reason: 'too_many_uploads' }
+    );
+
+    await releaseUploadQuota(wsA.workspace.id, 'ws_blob_1_abcdefgh');
+    assert.deepEqual(await verifyUploadSession(wsA.workspace.id, 'ws_blob_1_abcdefgh', 'up_1'), { ok: false });
+
+    // Fill 880 MB via feed items (4 x 220 MB), plus 100 MB reserved = 980 MB; next 100 MB exceeds 1 GB
+    const { addFeedItem } = await import('./workspace-store.ts');
+    for (let i = 0; i < 4; i++) {
+      await addFeedItem({
+        workspaceId: wsA.workspace.id,
+        deviceId: wsA.device.id,
+        kind: 'file',
+        encryptedMeta: `m${i}`,
+        encryptedBody: null,
+        blobKey: `ws_fill_${i}_abcdefgh`,
+        sizeBytes: 220 * 1024 * 1024,
+        chunkCount: 1,
+      });
+    }
+    assert.deepEqual(
+      await reserveUploadQuota(wsA.workspace.id, wsA.device.id, 'ws_blob_5_abcdefgh', 'up_5', 100 * 1024 * 1024, 7),
+      { ok: false, reason: 'storage_full' }
+    );
+  });
 });

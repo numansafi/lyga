@@ -1,6 +1,11 @@
 import { after, NextResponse } from 'next/server';
 import { withWorkspaceSession } from '@/lib/mvp/api-context';
-import { assertSafeBlobKey, readLocalBlob, saveLocalBlob } from '@/lib/mvp/blob-store';
+import {
+  assertSafeBlobKey,
+  readLocalBlob,
+  readLocalBlobRange,
+  saveLocalBlob,
+} from '@/lib/mvp/blob-store';
 import { FREE_MAX_FILE_BYTES } from '@/lib/mvp/constants';
 import { getWorkspaceState } from '@/lib/mvp/workspace-store';
 
@@ -45,7 +50,7 @@ export async function PUT(
 }
 
 export async function GET(
-  _req: Request,
+  req: Request,
   context: { params: Promise<{ key: string }> }
 ) {
   return withWorkspaceSession('mvp blobs GET', 'Unable to read blob.', async ({ session }) => {
@@ -63,6 +68,32 @@ export async function GET(
       return NextResponse.json({ error: 'Not found.' }, { status: 404 });
     }
 
+    const rangeHeader = req.headers.get('range');
+    if (rangeHeader) {
+      const match = /^bytes=(\d+)-(\d*)$/.exec(rangeHeader.trim());
+      if (!match) {
+        return NextResponse.json({ error: 'Invalid Range header.' }, { status: 416 });
+      }
+      const start = Number(match[1]);
+      const end = match[2] ? Number(match[2]) : undefined;
+      const range = await readLocalBlobRange(key, start, end);
+      if (!range) {
+        return NextResponse.json({ error: 'Not found.' }, { status: 404 });
+      }
+
+      return new NextResponse(new Uint8Array(range.chunk), {
+        status: 206,
+        headers: {
+          'Content-Type': 'application/octet-stream',
+          'Content-Range': `bytes ${range.start}-${range.end}/${range.totalSize}`,
+          'Content-Length': String(range.chunk.byteLength),
+          'Accept-Ranges': 'bytes',
+          'X-Content-Type-Options': 'nosniff',
+          'Cache-Control': 'private, no-store',
+        },
+      });
+    }
+
     const data = await readLocalBlob(key);
     if (!data) {
       return NextResponse.json({ error: 'Not found.' }, { status: 404 });
@@ -71,6 +102,9 @@ export async function GET(
     return new NextResponse(new Uint8Array(data), {
       headers: {
         'Content-Type': 'application/octet-stream',
+        'Content-Disposition': 'attachment',
+        'Accept-Ranges': 'bytes',
+        'X-Content-Type-Options': 'nosniff',
         'Cache-Control': 'private, no-store',
       },
     });

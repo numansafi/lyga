@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '@mantine/core';
 import { ChevronDown, Lock } from 'lucide-react';
-import type { WaitlistPlan } from '@/lib/analytics';
+import type { PlanTier } from '@/lib/analytics';
+import { PLANS } from '@/lib/pricingplan';
 import styles from './DmFeedSection.module.css';
 
 interface DmFeedSectionProps {
-  onSelectPlan: (plan: WaitlistPlan) => void;
+  onSelectPlan: (plan: PlanTier) => void;
 }
 
 type CompetitorKey = 'whatsapp' | 'email' | 'apps';
@@ -30,7 +31,7 @@ const COMPARE_ROWS: {
     whatsapp: { text: 'Tiny — 16 MB', pct: 4 },
     email: { text: '25 MB', pct: 6 },
     apps: { text: '2 GB (free tier)', pct: 40 },
-    lyga: { text: '500 MB free, 5 GB Pro', pct: 100 },
+    lyga: { text: `${PLANS.free.maxFileLabel} free, ${PLANS.pro.maxFileLabel} ${PLANS.pro.shortName}`, pct: 100 },
   },
   {
     feature: 'Does it ruin quality?',
@@ -82,15 +83,15 @@ const FAQS = [
   },
   {
     value: 'expiry',
-    question: 'What happens to my files after 7 days on the Free plan?',
+    question: `What happens to my files after ${PLANS.free.expiryLabel} on the Free plan?`,
     answer:
-      "Uploaded files are removed after 7 days, while your text notes and links stay. If you want to keep files long-term, Pro gives you 100 GB of storage that doesn't expire.",
+      `Uploaded files are removed after ${PLANS.free.expiryLabel}, while your text notes and links stay. If you want to keep files long-term, ${PLANS.pro.shortName} gives you ${PLANS.pro.maxStorageLabel} of storage that doesn't expire.`,
   },
   {
     value: 'billing',
     question: 'Do I need a credit card to get started?',
     answer:
-      'No. Starter is completely free with 500 MB per file, 2 GB active storage, and 2 paired devices. Just sign in and start sending.',
+      `No. The ${PLANS.free.shortName} plan is completely free with ${PLANS.free.maxFileLabel} per file, ${PLANS.free.maxStorageLabel} active storage, and ${PLANS.free.maxDevices} paired devices. Just sign in and start sending.`,
   },
 ];
 
@@ -177,6 +178,8 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
   const [barsVisible, setBarsVisible] = useState(false);
   const [activeCompetitor, setActiveCompetitor] = useState<CompetitorKey>('whatsapp');
   const [openFaq, setOpenFaq] = useState<string | null>(FAQS[0]?.value ?? null);
+  const [billing, setBilling] = useState<'monthly' | 'yearly'>('yearly');
+  const isYearly = billing === 'yearly';
 
   const selectedCompetitor =
     COMPETITOR_TABS.find((tab) => tab.key === activeCompetitor) ?? COMPETITOR_TABS[0];
@@ -210,8 +213,10 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           </span>
         </div>
 
-        {/* Message 1: Left (The Problem) */}
-        <AnimatedMsg side="left">
+        {/* Exchange 1: Problem & Solution */}
+        <div className={styles.exchangeGroup}>
+          {/* Message 1: Left (The Problem) */}
+          <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>You</span>
@@ -230,35 +235,38 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
             <div className={styles.senderMetaOutgoing}>
               <span>Lyga</span>
               <span className={styles.ticks} aria-hidden="true">
-                4:18 PM ✓✓
+                4:18 PM
               </span>
             </div>
-            <p className={styles.outgoingLead}>Send it with Lyga instead.</p>
+            <p className={styles.outgoingLead}>Drop it in Lyga instead.</p>
             <ul className={styles.outgoingList}>
               <li>
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>Scan a QR code to connect</span>
+                <span>Works in your browser — nothing to install</span>
               </li>
               <li>
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>Feels like texting yourself</span>
+                <span>Scan a QR code to connect your phone and PC</span>
               </li>
               <li>
                 <span className={styles.outgoingTick} aria-hidden="true">
                   ✓✓
                 </span>
-                <span>4K videos &amp; files at full quality</span>
+                <span>Full-quality 4K videos and iPhone .HEIC photo previews</span>
               </li>
             </ul>
           </div>
         </AnimatedMsg>
+        </div>
 
-        {/* Message 3: Left Question from iPhone 16 */}
-        <AnimatedMsg side="left">
+        {/* Exchange 2: Comparison */}
+        <div className={styles.exchangeGroup}>
+          {/* Message 3: Left Question from iPhone 16 */}
+          <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>You</span>
@@ -276,7 +284,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           <div ref={compareRef} className={styles.compareMsgCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
-              <span className={styles.timestamp}>4:19 PM ✓✓</span>
+              <span className={styles.timestamp}>4:19 PM</span>
             </div>
             <h2 className={styles.compareMsgTitle}>
               Built for the gap between your phone and computer
@@ -286,15 +294,33 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
               className={styles.compareTabs}
               role="tablist"
               aria-label="Compare Lyga against"
+              onKeyDown={(e) => {
+                const idx = COMPETITOR_TABS.findIndex((t) => t.key === activeCompetitor);
+                if (idx === -1) return;
+                let nextIdx = idx;
+                if (e.key === 'ArrowRight') nextIdx = (idx + 1) % COMPETITOR_TABS.length;
+                else if (e.key === 'ArrowLeft')
+                  nextIdx = (idx - 1 + COMPETITOR_TABS.length) % COMPETITOR_TABS.length;
+                else if (e.key === 'Home') nextIdx = 0;
+                else if (e.key === 'End') nextIdx = COMPETITOR_TABS.length - 1;
+                else return;
+                e.preventDefault();
+                const nextKey = COMPETITOR_TABS[nextIdx].key;
+                setActiveCompetitor(nextKey);
+                document.getElementById(`tab-${nextKey}`)?.focus();
+              }}
             >
               {COMPETITOR_TABS.map((tab) => {
                 const isSelected = activeCompetitor === tab.key;
                 return (
                   <button
                     key={tab.key}
+                    id={`tab-${tab.key}`}
                     type="button"
                     role="tab"
                     aria-selected={isSelected}
+                    aria-controls="compare-tabpanel"
+                    tabIndex={isSelected ? 0 : -1}
                     className={`${styles.compareTab} ${
                       isSelected ? styles.compareTabActive : ''
                     }`}
@@ -306,7 +332,12 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
               })}
             </div>
 
-            <div className={styles.comparePairCard} role="tabpanel">
+            <div
+              id="compare-tabpanel"
+              className={styles.comparePairCard}
+              role="tabpanel"
+              aria-labelledby={`tab-${activeCompetitor}`}
+            >
               <div className={styles.comparePairHeader}>
                 <div className={styles.comparePairLabelHeader}>What matters</div>
                 <div className={styles.comparePairThemHeader}>{selectedCompetitor.name}</div>
@@ -360,9 +391,12 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
             </div>
           </div>
         </AnimatedMsg>
+        </div>
 
-        {/* Message 5: Left Security Question from iPhone 16 */}
-        <AnimatedMsg side="left">
+        {/* Exchange 3: Security */}
+        <div className={styles.exchangeGroup}>
+          {/* Message 5: Left Security Question from iPhone 16 */}
+          <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>You</span>
@@ -379,7 +413,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           <div className={styles.securityMsgCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
-              <span className={styles.timestamp}>4:20 PM ✓✓</span>
+              <span className={styles.timestamp}>4:20 PM</span>
             </div>
             <div className={styles.pricingMsgHeader}>
               <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
@@ -467,9 +501,12 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
             </div>
           </div>
         </AnimatedMsg>
+        </div>
 
-        {/* Message 7: Left Price Objection from iPhone 16 */}
-        <AnimatedMsg side="left">
+        {/* Exchange 4: Pricing */}
+        <div className={styles.exchangeGroup}>
+          {/* Message 7: Left Price Objection from iPhone 16 */}
+          <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>You</span>
@@ -486,12 +523,31 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           <div className={styles.pricingMsgCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
-              <span className={styles.timestamp}>4:21 PM ✓✓</span>
+              <span className={styles.timestamp}>4:21 PM</span>
             </div>
             <div className={styles.pricingMsgHeader}>
               <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
-                Start free. Lock in £5/mo Pro with no card today.
+                Start free today. Pro ({isYearly ? `${PLANS.pro.yearlyMonthlyLabel}/mo` : `${PLANS.pro.priceLabel}/mo`}) is coming soon.
               </h2>
+              <div className={styles.billingToggle} role="group" aria-label="Billing interval">
+                <button
+                  type="button"
+                  aria-pressed={isYearly}
+                  className={`${styles.billingBtn} ${isYearly ? styles.billingBtnActive : ''}`}
+                  onClick={() => setBilling('yearly')}
+                >
+                  Yearly
+                  <span className={styles.savePill}>{PLANS.pro.yearlySaveLabel}</span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!isYearly}
+                  className={`${styles.billingBtn} ${!isYearly ? styles.billingBtnActive : ''}`}
+                  onClick={() => setBilling('monthly')}
+                >
+                  Monthly
+                </button>
+              </div>
             </div>
 
             <div className={styles.pricingGrid}>
@@ -504,15 +560,15 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   </div>
                   <div className={styles.statStrip}>
                     <div>
-                      <div className={styles.statVal}>500 MB</div>
+                      <div className={styles.statVal}>{PLANS.free.maxFileLabel}</div>
                       <div className={styles.statLabel}>Per file</div>
                     </div>
                     <div>
-                      <div className={styles.statVal}>7 days</div>
+                      <div className={styles.statVal}>{PLANS.free.expiryLabel}</div>
                       <div className={styles.statLabel}>Files kept</div>
                     </div>
                     <div>
-                      <div className={styles.statVal}>2</div>
+                      <div className={styles.statVal}>{PLANS.free.maxDevices}</div>
                       <div className={styles.statLabel}>Devices</div>
                     </div>
                   </div>
@@ -527,7 +583,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                       <span className={styles.checkTick} aria-hidden="true">
                         ✓✓
                       </span>
-                      <span>2 GB of space for recent files</span>
+                      <span>{PLANS.free.maxStorageLabel} of space for recent files</span>
                     </li>
                     <li>
                       <span className={styles.checkTick} aria-hidden="true">
@@ -538,7 +594,6 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   </ul>
                 </div>
                 <Button
-                  variant="default"
                   size="md"
                   fullWidth
                   className={styles.pressBtn}
@@ -552,24 +607,31 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 <div>
                   <div className={styles.planHeader}>
                     <h3 className={styles.planName}>Pro</h3>
-                    <span className={styles.earlyBadge}>Founder Rate</span>
+                    <span className={styles.earlyBadge}>Coming soon · Founder Rate</span>
                   </div>
                   <div className={styles.priceRow}>
-                    <span className={styles.price}>£5</span>
-                    <span className={styles.priceUnit}>/ month</span>
-                    <span className={styles.strikePrice}>£8/mo</span>
+                    <span className={styles.price}>
+                      {isYearly ? PLANS.pro.yearlyMonthlyLabel : PLANS.pro.priceLabel}
+                    </span>
+                    <span className={styles.priceUnit}>{PLANS.pro.billingPeriodLabel}</span>
+                    <span className={styles.strikePrice}>
+                      {isYearly ? `${PLANS.pro.priceLabel}/mo` : PLANS.pro.regularPriceLabel}
+                    </span>
+                    {isYearly && (
+                      <span className={styles.yearlyTotal}>Billed {PLANS.pro.yearlyTotalLabel}</span>
+                    )}
                   </div>
                   <div className={styles.statStrip}>
                     <div>
-                      <div className={styles.statVal}>5 GB</div>
+                      <div className={styles.statVal}>{PLANS.pro.maxFileLabel}</div>
                       <div className={styles.statLabel}>Per file</div>
                     </div>
                     <div>
-                      <div className={styles.statVal}>100 GB</div>
+                      <div className={styles.statVal}>{PLANS.pro.maxStorageLabel}</div>
                       <div className={styles.statLabel}>Storage</div>
                     </div>
                     <div>
-                      <div className={styles.statVal}>5</div>
+                      <div className={styles.statVal}>{PLANS.pro.maxDevices}</div>
                       <div className={styles.statLabel}>Devices</div>
                     </div>
                   </div>
@@ -578,13 +640,13 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                       <span className={styles.checkTick} aria-hidden="true">
                         ✓✓
                       </span>
-                      <span>Send 5 GB files with zero quality loss</span>
+                      <span>Send {PLANS.pro.maxFileLabel} files with zero quality loss</span>
                     </li>
                     <li>
                       <span className={styles.checkTick} aria-hidden="true">
                         ✓✓
                       </span>
-                      <span>100 GB storage that never expires</span>
+                      <span>{PLANS.pro.maxStorageLabel} storage that never expires</span>
                     </li>
                     <li>
                       <span className={styles.checkTick} aria-hidden="true">
@@ -596,22 +658,26 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 </div>
                 <div>
                   <Button
+                    variant="default"
                     size="md"
                     fullWidth
                     className={styles.pressBtn}
-                    onClick={() => onSelectPlan('pro_founder')}
+                    onClick={() => onSelectPlan('pro')}
                   >
-                    Get Started →
+                    Start free · Pro coming soon →
                   </Button>
-                  <p className={styles.ctaNote}>Start free today. Upgrade to Pro anytime.</p>
+                  <p className={styles.ctaNote}>Free plan works right now. No card needed.</p>
                 </div>
               </div>
             </div>
           </div>
         </AnimatedMsg>
+        </div>
 
-        {/* Message 9: Left FAQ Prompt from You */}
-        <AnimatedMsg side="left">
+        {/* Exchange 5: FAQ & Closing CTA */}
+        <div className={styles.exchangeGroup}>
+          {/* Message 9: Left FAQ Prompt from You */}
+          <AnimatedMsg side="left">
           <div className={styles.bubbleIncoming}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>You</span>
@@ -628,7 +694,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
           <div className={styles.faqCard}>
             <div className={styles.senderMeta}>
               <span className={styles.senderName}>Lyga</span>
-              <span className={styles.timestamp}>4:22 PM ✓✓</span>
+              <span className={styles.timestamp}>4:22 PM</span>
             </div>
             <h2 className={styles.compareMsgTitle}>Of course. Here&apos;s what to know.</h2>
             <div className={styles.faqList}>
@@ -643,6 +709,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                       type="button"
                       className={styles.faqTrigger}
                       aria-expanded={isOpen}
+                      aria-controls={`faq-answer-${item.value}`}
                       onClick={() => setOpenFaq(isOpen ? null : item.value)}
                     >
                       <span>{item.question}</span>
@@ -655,13 +722,38 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                         }`}
                       />
                     </button>
-                    {isOpen && <p className={styles.faqAnswer}>{item.answer}</p>}
+                    {isOpen && (
+                      <p id={`faq-answer-${item.value}`} className={styles.faqAnswer}>
+                        {item.answer}
+                      </p>
+                    )}
                   </div>
                 );
               })}
             </div>
           </div>
         </AnimatedMsg>
+
+        {/* Message 11: Closing CTA from Lyga */}
+        <AnimatedMsg side="right">
+          <div className={styles.closingCtaCard}>
+            <div className={styles.senderMetaOutgoing}>
+              <span>Lyga</span>
+              <span className={styles.ticks}>4:22 PM</span>
+            </div>
+            <p className={styles.closingCtaCopy}>
+              Ready when you are. Start free in seconds.
+            </p>
+            <Button
+              size="md"
+              className={`${styles.pressBtn} ${styles.closingCtaBtn}`}
+              onClick={() => onSelectPlan('free')}
+            >
+              Start Free →
+            </Button>
+          </div>
+        </AnimatedMsg>
+        </div>
       </div>
     </section>
   );

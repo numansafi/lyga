@@ -3,3 +3,5 @@ packages:
   - "packages/*"
 allowBuilds:
   core-js: false
+overrides:
+  postcss: ">=8.5.23"

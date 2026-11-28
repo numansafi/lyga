@@ -1,13 +1,14 @@
 'use client';
 
 import { FileText, Film } from 'lucide-react';
+import { PLANS } from '@/lib/pricingplan';
 import styles from './HeroSection.module.css';
 
 interface HeroSectionProps {
-  onOpenWaitlist: () => void;
+  onGetStarted: () => void;
 }
 
-export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
+export function HeroSection({ onGetStarted }: HeroSectionProps) {
   return (
     <section className={styles.section}>
       <div className={styles.inner}>
@@ -61,17 +62,14 @@ export function HeroSection({ onOpenWaitlist }: HeroSectionProps) {
 
           <p className={`${styles.bubble} ${styles.bubbleRight} ${styles.step1}`}>
             Send 4K videos, photos, and any file between your phone and computer.
-            <span className={`${styles.receipt} ${styles.receipt1}`} aria-hidden="true">
-              ✓✓
-            </span>
           </p>
 
-          <button type="button" className={styles.heroCta} onClick={onOpenWaitlist}>
+          <button type="button" className={styles.heroCta} onClick={onGetStarted}>
             Get started free →
           </button>
 
           <p className={styles.heroNote}>
-            Free up to 500 MB/file. Sign in with Google or email.
+            Free up to {PLANS.free.maxFileLabel}/file. Sign in with Google or email.
           </p>
         </div>
       </div>

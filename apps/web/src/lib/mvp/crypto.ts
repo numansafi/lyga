@@ -7,6 +7,8 @@ export interface DecryptedItemMeta {
   sizeBytes?: number;
   senderDeviceId?: string;
   senderLabel?: string;
+  formatVersion?: 1 | 2;
+  totalChunks?: number;
 }
 
 function toBase64Url(bytes: Uint8Array): string {
@@ -46,6 +48,32 @@ export async function importWorkspaceKey(wmkBase64Url: string): Promise<CryptoKe
     'encrypt',
     'decrypt',
   ]);
+}
+
+/** Import the raw 256-bit workspace key as an HKDF base key for per-file v2 subkey derivation. */
+export async function importWorkspaceHkdfKey(wmkBase64Url: string): Promise<CryptoKey> {
+  const raw = fromBase64Url(wmkBase64Url);
+  if (raw.byteLength !== 32) {
+    throw new Error('Invalid workspace key length.');
+  }
+  return crypto.subtle.importKey('raw', toArrayBuffer(raw), { name: 'HKDF' }, false, ['deriveKey']);
+}
+
+/** Derive a unique AES-GCM-256 key per blobKey so chunks cannot be swapped across files. */
+export async function deriveFileKey(hkdfKey: CryptoKey, blobKey: string): Promise<CryptoKey> {
+  const enc = new TextEncoder();
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: toArrayBuffer(enc.encode(`lyga-v2:${blobKey}`)),
+      info: toArrayBuffer(enc.encode('file-aes-gcm')),
+    },
+    hkdfKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
 }
 
 export async function encryptString(key: CryptoKey, plaintext: string): Promise<string> {
@@ -147,6 +175,75 @@ export async function decryptFileChunked(
   }
 
   return new Blob(plainParts, { type: mimeType });
+}
+
+function buildFrameAad(chunkIndex: number, totalChunks: number): ArrayBuffer {
+  return toArrayBuffer(new TextEncoder().encode(`v2:${chunkIndex}:${totalChunks}`));
+}
+
+/**
+ * Encrypts a single format-v2 frame (1 frame = 1 R2 part) with per-file HKDF key and AAD
+ * binding chunkIndex and totalChunks.
+ */
+export async function encryptFileFrameV2(
+  fileKey: CryptoKey,
+  plainBytes: ArrayBuffer | Uint8Array,
+  chunkIndex: number,
+  totalChunks: number
+): Promise<Uint8Array> {
+  const plainBuf = plainBytes instanceof Uint8Array ? toArrayBuffer(plainBytes) : plainBytes;
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipherBuf = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: toArrayBuffer(iv),
+      additionalData: buildFrameAad(chunkIndex, totalChunks),
+    },
+    fileKey,
+    plainBuf
+  );
+
+  const frameLen = 12 + cipherBuf.byteLength;
+  const out = new Uint8Array(4 + frameLen);
+  new DataView(out.buffer).setUint32(0, frameLen, false);
+  out.set(iv, 4);
+  out.set(new Uint8Array(cipherBuf), 16);
+  return out;
+}
+
+/**
+ * Decrypts and authenticates a single format-v2 frame, rejecting reordered, cross-file,
+ * or truncated frames.
+ */
+export async function decryptFileFrameV2(
+  fileKey: CryptoKey,
+  frameBytes: Uint8Array,
+  chunkIndex: number,
+  totalChunks: number
+): Promise<Uint8Array> {
+  if (frameBytes.byteLength < 4 + 12 + 16) {
+    throw new Error('Corrupt or truncated encrypted frame.');
+  }
+  const frameLen = new DataView(
+    frameBytes.buffer,
+    frameBytes.byteOffset,
+    frameBytes.byteLength
+  ).getUint32(0, false);
+  if (frameLen < 28 || 4 + frameLen !== frameBytes.byteLength) {
+    throw new Error('Corrupt encrypted frame length.');
+  }
+  const iv = frameBytes.subarray(4, 16);
+  const cipher = frameBytes.subarray(16);
+  const plainBuf = await crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: toArrayBuffer(iv),
+      additionalData: buildFrameAad(chunkIndex, totalChunks),
+    },
+    fileKey,
+    toArrayBuffer(cipher)
+  );
+  return new Uint8Array(plainBuf);
 }
 
 export function classifyTextKind(text: string): FeedItemKind {

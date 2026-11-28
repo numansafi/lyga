@@ -7,17 +7,31 @@ import {
   FREE_MAX_DEVICES,
   FREE_MAX_FILE_BYTES,
   FREE_MAX_STORAGE_BYTES,
+  getWorkspaceLimits,
   type DeviceRecord,
   type FeedItemKind,
   type FeedItemRecord,
+  type PlanName,
   type WorkspaceRecord,
 } from './constants.ts';
+import { PLANS } from '../pricingplan.ts';
 import { publishWorkspaceEvent } from './events.ts';
+
+interface UploadSessionRecord {
+  blob_key: string;
+  workspace_id: string;
+  device_id: string;
+  upload_id: string;
+  size_bytes: number;
+  total_parts: number;
+  created_at: string;
+}
 
 interface LocalMvpData {
   workspaces: WorkspaceRecord[];
   devices: DeviceRecord[];
   items: FeedItemRecord[];
+  uploadSessions?: UploadSessionRecord[];
 }
 
 const localMvpStore = createJsonFileStore<LocalMvpData>({
@@ -365,37 +379,40 @@ export async function addFeedItem(input: {
   sizeBytes: number;
   chunkCount: number;
 }): Promise<{ ok: true; item: FeedItemRecord } | { ok: false; reason: 'unauthorized' | 'file_too_large' | 'storage_full' }> {
-  if (input.sizeBytes > FREE_MAX_FILE_BYTES) {
-    return { ok: false, reason: 'file_too_large' };
-  }
-
   const now = new Date();
   const isFileLike = input.kind === 'media' || input.kind === 'file';
-  const expiresAt = isFileLike
-    ? new Date(now.getTime() + FREE_EXPIRY_DAYS * 24 * 60 * 60 * 1000).toISOString()
-    : null;
-
-  const item: FeedItemRecord = {
-    id: randomUUID(),
-    workspace_id: input.workspaceId,
-    kind: input.kind,
-    encrypted_meta: input.encryptedMeta,
-    encrypted_body: input.encryptedBody,
-    blob_key: input.blobKey,
-    size_bytes: input.sizeBytes,
-    chunk_count: input.chunkCount,
-    expires_at: expiresAt,
-    created_at: now.toISOString(),
-  };
 
   const supabase = getSupabaseAdmin();
   if (supabase) {
     const state = await getWorkspaceState(input.workspaceId, input.deviceId);
     if (!state) return { ok: false, reason: 'unauthorized' };
 
+    const limits = getWorkspaceLimits(state.workspace);
+    if (input.sizeBytes > limits.maxFileBytes) {
+      return { ok: false, reason: 'file_too_large' };
+    }
+
     if (state.usedBytes + input.sizeBytes > state.workspace.storage_limit_bytes) {
       return { ok: false, reason: 'storage_full' };
     }
+
+    const expiresAt =
+      isFileLike && limits.expiryDays !== null
+        ? new Date(now.getTime() + limits.expiryDays * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+    const item: FeedItemRecord = {
+      id: randomUUID(),
+      workspace_id: input.workspaceId,
+      kind: input.kind,
+      encrypted_meta: input.encryptedMeta,
+      encrypted_body: input.encryptedBody,
+      blob_key: input.blobKey,
+      size_bytes: input.sizeBytes,
+      chunk_count: input.chunkCount,
+      expires_at: expiresAt,
+      created_at: now.toISOString(),
+    };
 
     const { error } = await supabase.from('feed_items').insert(item);
     if (error) throw new Error(`Supabase item insert error: ${error.message}`);
@@ -410,6 +427,29 @@ export async function addFeedItem(input: {
       (d) => d.id === input.deviceId && d.workspace_id === input.workspaceId
     );
     if (!ws || !dev) return { ok: false, reason: 'unauthorized' };
+
+    const limits = getWorkspaceLimits(ws);
+    if (input.sizeBytes > limits.maxFileBytes) {
+      return { ok: false, reason: 'file_too_large' };
+    }
+
+    const expiresAt =
+      isFileLike && limits.expiryDays !== null
+        ? new Date(now.getTime() + limits.expiryDays * 24 * 60 * 60 * 1000).toISOString()
+        : null;
+
+    const item: FeedItemRecord = {
+      id: randomUUID(),
+      workspace_id: input.workspaceId,
+      kind: input.kind,
+      encrypted_meta: input.encryptedMeta,
+      encrypted_body: input.encryptedBody,
+      blob_key: input.blobKey,
+      size_bytes: input.sizeBytes,
+      chunk_count: input.chunkCount,
+      expires_at: expiresAt,
+      created_at: now.toISOString(),
+    };
 
     const nowMs = Date.now();
     const usedBytes = data.items
@@ -673,4 +713,248 @@ export async function deleteWorkspaceAndAccount(
     publishWorkspaceEvent(workspaceId);
     return true;
   });
+}
+
+const MAX_CONCURRENT_MULTIPART_UPLOADS = 3;
+const RESERVATION_TTL_MS = 24 * 60 * 60 * 1000;
+
+export async function reserveUploadQuota(
+  workspaceId: string,
+  deviceId: string,
+  blobKey: string,
+  uploadId: string,
+  sizeBytes: number,
+  totalParts: number
+): Promise<
+  | { ok: true }
+  | { ok: false; reason: 'unauthorized' | 'file_too_large' | 'storage_full' | 'too_many_uploads' }
+> {
+  if (sizeBytes <= 0) {
+    return { ok: false, reason: 'file_too_large' };
+  }
+
+  const cutoffIso = new Date(Date.now() - RESERVATION_TTL_MS).toISOString();
+  const nowIso = new Date().toISOString();
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const state = await getWorkspaceState(workspaceId, deviceId);
+    if (!state) return { ok: false, reason: 'unauthorized' };
+
+    const limits = getWorkspaceLimits(state.workspace);
+    if (sizeBytes > limits.maxFileBytes) {
+      return { ok: false, reason: 'file_too_large' };
+    }
+
+    await supabase
+      .from('upload_sessions')
+      .delete()
+      .eq('workspace_id', workspaceId)
+      .lt('created_at', cutoffIso);
+
+    const { data: activeSessions, error: sessErr } = await supabase
+      .from('upload_sessions')
+      .select('size_bytes')
+      .eq('workspace_id', workspaceId);
+    if (sessErr) throw new Error(`Supabase upload session lookup error: ${sessErr.message}`);
+
+    const active = (activeSessions ?? []) as Array<{ size_bytes: number }>;
+    if (active.length >= MAX_CONCURRENT_MULTIPART_UPLOADS) {
+      return { ok: false, reason: 'too_many_uploads' };
+    }
+
+    const reserved = active.reduce((sum, s) => sum + Number(s.size_bytes || 0), 0);
+    if (state.usedBytes + reserved + sizeBytes > state.workspace.storage_limit_bytes) {
+      return { ok: false, reason: 'storage_full' };
+    }
+
+    const { error: insErr } = await supabase.from('upload_sessions').insert({
+      blob_key: blobKey,
+      workspace_id: workspaceId,
+      device_id: deviceId,
+      upload_id: uploadId,
+      size_bytes: sizeBytes,
+      total_parts: totalParts,
+      created_at: nowIso,
+    });
+    if (insErr) throw new Error(`Supabase upload session insert error: ${insErr.message}`);
+    return { ok: true };
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const ws = data.workspaces.find((w) => w.id === workspaceId);
+    const dev = data.devices.find(
+      (d) => d.id === deviceId && d.workspace_id === workspaceId
+    );
+    if (!ws || !dev) return { ok: false, reason: 'unauthorized' };
+
+    const limits = getWorkspaceLimits(ws);
+    if (sizeBytes > limits.maxFileBytes) {
+      return { ok: false, reason: 'file_too_large' };
+    }
+
+    const cutoffMs = Date.now() - RESERVATION_TTL_MS;
+    const allSessions = (data.uploadSessions ?? []).filter(
+      (s) => Date.parse(s.created_at) >= cutoffMs
+    );
+    const wsSessions = allSessions.filter((s) => s.workspace_id === workspaceId);
+    if (wsSessions.length >= MAX_CONCURRENT_MULTIPART_UPLOADS) {
+      return { ok: false, reason: 'too_many_uploads' };
+    }
+
+    const nowMs = Date.now();
+    const usedBytes = data.items
+      .filter(
+        (it) =>
+          it.workspace_id === workspaceId &&
+          (!it.expires_at || Date.parse(it.expires_at) > nowMs)
+      )
+      .reduce((sum, it) => sum + it.size_bytes, 0);
+    const reserved = wsSessions.reduce((sum, s) => sum + s.size_bytes, 0);
+
+    if (usedBytes + reserved + sizeBytes > ws.storage_limit_bytes) {
+      return { ok: false, reason: 'storage_full' };
+    }
+
+    allSessions.push({
+      blob_key: blobKey,
+      workspace_id: workspaceId,
+      device_id: deviceId,
+      upload_id: uploadId,
+      size_bytes: sizeBytes,
+      total_parts: totalParts,
+      created_at: nowIso,
+    });
+    data.uploadSessions = allSessions;
+    await writeLocalData(data);
+    return { ok: true };
+  });
+}
+
+export async function verifyUploadSession(
+  workspaceId: string,
+  blobKey: string,
+  uploadId: string
+): Promise<{ ok: true; totalParts: number } | { ok: false }> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('upload_sessions')
+      .select('total_parts, upload_id')
+      .eq('blob_key', blobKey)
+      .eq('workspace_id', workspaceId)
+      .maybeSingle();
+    if (error || !data) return { ok: false };
+    const row = data as { total_parts: number; upload_id: string };
+    if (row.upload_id !== uploadId) return { ok: false };
+    return { ok: true, totalParts: row.total_parts };
+  }
+
+  const data = await readLocalData();
+  const row = (data.uploadSessions ?? []).find(
+    (s) =>
+      s.blob_key === blobKey &&
+      s.workspace_id === workspaceId &&
+      s.upload_id === uploadId
+  );
+  if (!row) return { ok: false };
+  return { ok: true, totalParts: row.total_parts };
+}
+
+export async function releaseUploadQuota(
+  workspaceId: string,
+  blobKey: string
+): Promise<void> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    await supabase
+      .from('upload_sessions')
+      .delete()
+      .eq('blob_key', blobKey)
+      .eq('workspace_id', workspaceId);
+    return;
+  }
+
+  await withLocalLock(async () => {
+    const data = await readLocalData();
+    if (!data.uploadSessions) return;
+    data.uploadSessions = data.uploadSessions.filter(
+      (s) => !(s.blob_key === blobKey && s.workspace_id === workspaceId)
+    );
+    await writeLocalData(data);
+  });
+}
+
+export async function setWorkspacePlan(
+  workspaceId: string,
+  input: {
+    plan: PlanName;
+    stripeCustomerId?: string | null;
+    stripeSubscriptionId?: string | null;
+    subscriptionStatus?: string | null;
+    currentPeriodEnd?: string | null;
+  }
+): Promise<boolean> {
+  const tier = input.plan === 'pro' ? PLANS.pro : PLANS.free;
+  const patch: Partial<WorkspaceRecord> = {
+    plan: input.plan,
+    max_devices: tier.maxDevices,
+    storage_limit_bytes: tier.maxStorageBytes,
+    ...(input.stripeCustomerId !== undefined
+      ? { stripe_customer_id: input.stripeCustomerId }
+      : {}),
+    ...(input.stripeSubscriptionId !== undefined
+      ? { stripe_subscription_id: input.stripeSubscriptionId }
+      : {}),
+    ...(input.subscriptionStatus !== undefined
+      ? { subscription_status: input.subscriptionStatus }
+      : {}),
+    ...(input.currentPeriodEnd !== undefined
+      ? { current_period_end: input.currentPeriodEnd }
+      : {}),
+  };
+
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('workspaces')
+      .update(patch)
+      .eq('id', workspaceId)
+      .select('id')
+      .maybeSingle();
+    if (error) throw new Error(`Supabase plan update error: ${error.message}`);
+    if (!data) return false;
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  }
+
+  return withLocalLock(async () => {
+    const data = await readLocalData();
+    const ws = data.workspaces.find((w) => w.id === workspaceId);
+    if (!ws) return false;
+    Object.assign(ws, patch);
+    await writeLocalData(data);
+    publishWorkspaceEvent(workspaceId);
+    return true;
+  });
+}
+
+export async function findWorkspaceByStripeCustomerId(
+  customerId: string
+): Promise<WorkspaceRecord | null> {
+  const supabase = getSupabaseAdmin();
+  if (supabase) {
+    const { data, error } = await supabase
+      .from('workspaces')
+      .select('*')
+      .eq('stripe_customer_id', customerId)
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(`Supabase customer lookup error: ${error.message}`);
+    return (data as WorkspaceRecord | null) ?? null;
+  }
+
+  const data = await readLocalData();
+  return data.workspaces.find((w) => w.stripe_customer_id === customerId) ?? null;
 }

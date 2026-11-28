@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { after, NextResponse } from 'next/server';
 import { mapStoreError, withWorkspaceSession } from '@/lib/mvp/api-context';
 import { createUploadUrl } from '@/lib/mvp/blob-store';
-import { FREE_MAX_FILE_BYTES } from '@/lib/mvp/constants';
+import { getWorkspaceLimits } from '@/lib/mvp/constants';
 import { getWorkspaceState } from '@/lib/mvp/workspace-store';
 
 export async function POST(req: Request) {
@@ -17,13 +17,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Valid sizeBytes is required.' }, { status: 400 });
     }
 
-    if (sizeBytes > FREE_MAX_FILE_BYTES) {
-      return mapStoreError('file_too_large');
-    }
-
     const state = await getWorkspaceState(session.workspaceId, session.deviceId, after);
     if (!state) {
       return mapStoreError('unauthorized');
+    }
+
+    const limits = getWorkspaceLimits(state.workspace);
+    if (sizeBytes > limits.maxFileBytes) {
+      return mapStoreError('file_too_large');
     }
 
     if (state.usedBytes + sizeBytes > state.workspace.storage_limit_bytes) {

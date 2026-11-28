@@ -1,5 +1,11 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { getSupabaseAdmin } from '../supabase-admin.ts';
+
+function secretsEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  return bufA.length === bufB.length && timingSafeEqual(bufA, bufB);
+}
 
 export interface QrLoginChallenge {
   id: string;
@@ -129,7 +135,7 @@ export async function pollQrLoginChallenge(
     }
     if (
       !row ||
-      row.secret !== secret ||
+      !secretsEqual(String(row.secret ?? ''), secret) ||
       new Date(row.expires_at as string).getTime() <= now
     ) {
       return { status: 'expired' };
@@ -165,7 +171,7 @@ export async function pollQrLoginChallenge(
 
   pruneExpired(now);
   const entry = getStore().get(id);
-  if (!entry || entry.expiresAt <= now || entry.secret !== secret) {
+  if (!entry || entry.expiresAt <= now || !secretsEqual(entry.secret, secret)) {
     return { status: 'expired' };
   }
 

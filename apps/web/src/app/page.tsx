@@ -3,9 +3,10 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { DmFeedSection } from '@/components/DmFeedSection';
+import feedStyles from '@/components/DmFeedSection.module.css';
 import { HeroSection } from '@/components/HeroSection';
 import { LandingHeader } from '@/components/LandingHeader';
-import { initAnalytics, trackEvent, type WaitlistPlan } from '@/lib/analytics';
+import { initAnalytics, trackEvent, type PlanTier } from '@/lib/analytics';
 
 export default function HomePage() {
   const router = useRouter();
@@ -15,29 +16,21 @@ export default function HomePage() {
     trackEvent('landing_viewed');
   }, []);
 
-  const goToApp = (source: 'hero' | WaitlistPlan) => {
+  const goToApp = (source: 'hero' | PlanTier) => {
     trackEvent('cta_clicked', { plan: source });
-    router.push('/login');
+    router.push(source === 'free' || source === 'pro' ? `/login?plan=${source}` : '/login');
   };
 
   return (
     <>
-      <LandingHeader onOpenWaitlist={() => goToApp('hero')} />
+      <LandingHeader onGetStarted={() => goToApp('hero')} />
       <main>
-        <HeroSection onOpenWaitlist={() => goToApp('hero')} />
+        <HeroSection onGetStarted={() => goToApp('hero')} />
         <DmFeedSection onSelectPlan={(plan) => goToApp(plan)} />
       </main>
-      <footer
-        style={{
-          borderTop: '1px solid var(--border-subtle)',
-          padding: '24px',
-          textAlign: 'center',
-          fontSize: '13px',
-          color: 'var(--text-secondary)',
-        }}
-      >
-        <strong style={{ color: 'var(--text-primary)', letterSpacing: '0.03em' }}>LYGA</strong> ·
-        Built for phone and computer · Encrypted in your browser
+      <footer className={feedStyles.siteFooter}>
+        <strong className={feedStyles.siteFooterBrand}>LYGA</strong> · Built for phone and
+        computer · Encrypted in your browser
       </footer>
     </>
   );

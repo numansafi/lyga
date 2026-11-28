@@ -80,7 +80,12 @@ export default function AuthCallbackPage() {
           return;
         }
 
-        router.replace('/app');
+        const nextParam = params.get('next');
+        const safeNext =
+          nextParam && nextParam.startsWith('/') && !nextParam.startsWith('//')
+            ? nextParam
+            : '/app';
+        router.replace(safeNext);
       } catch {
         if (active) setErrorMsg('Unable to finish sign-in. Please try again.');
       }
