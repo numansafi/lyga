@@ -988,7 +988,7 @@ export async function getWorkspaceWrappedKey(
       salt: row.wmk_salt,
       iv: row.wmk_iv,
       iterations: row.wmk_kdf_iterations,
-      kind: row.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+      kind: 'password',
       fingerprint: row.wmk_fingerprint ?? '',
     };
   }
@@ -1003,7 +1003,7 @@ export async function getWorkspaceWrappedKey(
     salt: ws.wmk_salt,
     iv: ws.wmk_iv,
     iterations: ws.wmk_kdf_iterations,
-    kind: ws.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+    kind: 'password',
     fingerprint: ws.wmk_fingerprint ?? '',
   };
 }

@@ -272,51 +272,7 @@ export function classifyFileKind(mimeType: string, fileName: string): 'media' | 
   return 'file';
 }
 
-const WEAK_SIX_DIGIT_PINS = new Set([
-  '000000',
-  '111111',
-  '222222',
-  '333333',
-  '444444',
-  '555555',
-  '666666',
-  '777777',
-  '888888',
-  '999999',
-  '123456',
-  '654321',
-  '012345',
-  '543210',
-  '112233',
-  '121212',
-]);
-
-/** Validates a 6-digit Sync PIN, returning an error message or null if valid. */
-export function validateSyncPin(pin: string): string | null {
-  if (!/^\d{6}$/.test(pin)) {
-    return 'Sync PIN must be exactly 6 digits.';
-  }
-  if (WEAK_SIX_DIGIT_PINS.has(pin)) {
-    return 'Choose a less predictable 6-digit PIN (avoid repeated or sequential digits).';
-  }
-  return null;
-}
-
-/** Hashes a 6-digit PIN locally so raw digits are never sent to the pepper endpoint. */
-export async function derivePinHash(pin: string, workspaceId: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    'SHA-256',
-    toArrayBuffer(new TextEncoder().encode(`lyga-pin-hash-v1:${workspaceId}:${pin}`))
-  );
-  return toBase64Url(new Uint8Array(digest));
-}
-
-/** Combines the local 6-digit PIN with the rate-limited server pepper for PBKDF2 wrapping. */
-export function combinePinWithPepper(pin: string, pepper: string): string {
-  return `${pin}:${pepper}`;
-}
-
-export type WrappedKeyKind = 'password' | 'passphrase';
+export type WrappedKeyKind = 'password';
 
 export const WMK_PBKDF2_ITERATIONS = 600_000;
 

@@ -27,7 +27,6 @@ import { WorkspaceHeader } from '@/components/mvp/WorkspaceHeader';
 import { WorkspaceAccountMenu, WorkspaceRailPanel } from '@/components/mvp/WorkspaceRailPanel';
 import { WorkspaceStream } from '@/components/mvp/WorkspaceStream';
 import {
-  SyncPinModal,
   WorkspaceKeySetupAndApproveBanners,
   WorkspaceKeyUnlockBanner,
 } from './WorkspaceKeyBanners';
@@ -94,7 +93,6 @@ export default function WorkspacePage() {
     return () => window.clearTimeout(timer);
   }, [infoMsg]);
   const [qrModalOpen, setQrModalOpen] = useState(false);
-  const [syncPinModalOpen, setSyncPinModalOpen] = useState(false);
   const [copiedImageId, setCopiedImageId] = useState<string | null>(null);
   const [recoveryCopied, setRecoveryCopied] = useState(false);
   const [pinnedIds, setPinnedIds] = useState<string[]>([]);
@@ -560,9 +558,6 @@ export default function WorkspacePage() {
       setRecoveryCopied(true);
       window.setTimeout(() => setRecoveryCopied(false), 1600);
     },
-    hasWrappedKey: workspace?.hasWrappedKey,
-    missingKey,
-    onOpenSyncPin: () => setSyncPinModalOpen(true),
     itemsCount: items.length,
     exportingZip,
     onExportZip: () => void handleExportZip(),
@@ -913,13 +908,6 @@ export default function WorkspacePage() {
         }}
         onDraftChange={setEditDraft}
         onSave={() => void handleSaveEdit()}
-      />
-      <SyncPinModal
-        opened={syncPinModalOpen}
-        workspace={workspace}
-        onClose={() => setSyncPinModalOpen(false)}
-        onSaved={loadWorkspace}
-        setInfoMsg={setInfoMsg}
       />
     </div>
   );

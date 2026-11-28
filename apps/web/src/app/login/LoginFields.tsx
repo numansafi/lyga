@@ -207,136 +207,6 @@ export function EncryptedBadge() {
   );
 }
 
-export function OtpDigitBoxes({
-  id = 'login-otp-code',
-  value,
-  onChange,
-  firstInputRef,
-  hasError,
-  errorId,
-}: {
-  id?: string;
-  value: string;
-  onChange: (nextCode: string) => void;
-  firstInputRef?: RefObject<HTMLInputElement | null>;
-  hasError?: boolean;
-  errorId?: string;
-}) {
-  const inputRefs = useRef<Array<HTMLInputElement | null>>([]);
-  const digits = Array.from({ length: 6 }, (_, i) => {
-    const ch = value[i];
-    return ch && /\d/.test(ch) ? ch : '';
-  });
-
-  const emitDigits = (slots: string[]) => {
-    onChange(slots.map((d) => (d && /\d/.test(d) ? d : ' ')).join('').replace(/\s+$/, ''));
-  };
-
-  const setRef = (idx: number) => (el: HTMLInputElement | null) => {
-    inputRefs.current[idx] = el;
-    if (idx === 0 && firstInputRef) {
-      firstInputRef.current = el;
-    }
-  };
-
-  const focusBox = (idx: number) => {
-    const clamped = Math.max(0, Math.min(5, idx));
-    inputRefs.current[clamped]?.focus();
-    inputRefs.current[clamped]?.select();
-  };
-
-  const handleDigitChange = (idx: number, raw: string) => {
-    const clean = raw.replace(/\D/g, '');
-    if (!clean) {
-      const next = [...digits];
-      next[idx] = '';
-      emitDigits(next);
-      return;
-    }
-    if (clean.length > 1) {
-      // Multi-character input (autofill or paste via change)
-      const next = [...digits];
-      const start = clean.length >= 6 ? 0 : idx;
-      for (let i = 0; i < clean.length && start + i < 6; i++) {
-        next[start + i] = clean[i] ?? '';
-      }
-      emitDigits(next);
-      focusBox(Math.min(5, start + clean.length));
-      return;
-    }
-    const next = [...digits];
-    next[idx] = clean;
-    emitDigits(next);
-    if (idx < 5) {
-      focusBox(idx + 1);
-    }
-  };
-
-  const handlePaste = (idx: number, e: ClipboardEvent<HTMLInputElement>) => {
-    const pasted = e.clipboardData.getData('text').replace(/\D/g, '');
-    if (!pasted) return;
-    e.preventDefault();
-    const next = [...digits];
-    const start = pasted.length >= 6 ? 0 : idx;
-    for (let i = 0; i < pasted.length && start + i < 6; i++) {
-      next[start + i] = pasted[i] ?? '';
-    }
-    emitDigits(next);
-    focusBox(Math.min(5, start + pasted.length - 1));
-  };
-
-  const handleKeyDown = (idx: number, e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Backspace') {
-      if (digits[idx]) {
-        const next = [...digits];
-        next[idx] = '';
-        emitDigits(next);
-      } else if (idx > 0) {
-        const next = [...digits];
-        next[idx - 1] = '';
-        emitDigits(next);
-        focusBox(idx - 1);
-      }
-      e.preventDefault();
-    } else if (e.key === 'ArrowLeft' && idx > 0) {
-      e.preventDefault();
-      focusBox(idx - 1);
-    } else if (e.key === 'ArrowRight' && idx < 5) {
-      e.preventDefault();
-      focusBox(idx + 1);
-    }
-  };
-
-  return (
-    <div
-      className={styles.otpGrid}
-      role="group"
-      aria-label="6-digit verification code"
-      aria-describedby={hasError ? errorId : undefined}
-    >
-      {digits.map((digit, idx) => (
-        <input
-          key={idx}
-          id={idx === 0 ? id : undefined}
-          ref={setRef(idx)}
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          autoComplete={idx === 0 ? 'one-time-code' : 'off'}
-          aria-label={`Digit ${idx + 1} of 6`}
-          aria-invalid={Boolean(hasError)}
-          className={`${styles.otpBox} ${hasError ? styles.otpBoxError : ''}`}
-          value={digit}
-          onChange={(e) => handleDigitChange(idx, e.currentTarget.value)}
-          onPaste={(e) => handlePaste(idx, e)}
-          onKeyDown={(e) => handleKeyDown(idx, e)}
-          onFocus={(e) => e.currentTarget.select()}
-        />
-      ))}
-    </div>
-  );
-}
-
 export function TroubleSigningInHelp() {
   return (
     <details className={styles.helpDisclosure}>
@@ -346,12 +216,12 @@ export function TroubleSigningInHelp() {
       </summary>
       <div className={styles.helpBody}>
         <p>
-          <strong>Didn&apos;t get the code?</strong> Check your spam folder, or sign in with Google
-          or a password using the same email.
+          <strong>Forgot your password?</strong> Use <em>Forgot password?</em> above to receive a
+          reset link, or scan the QR code from a signed-in device.
         </p>
         <p>
-          <strong>Your files stay private.</strong> Only your paired devices hold the key, so we
-          can never read what you send.
+          <strong>Your files stay private.</strong> Only your devices and password hold the key, so
+          we can never read what you send.
         </p>
       </div>
     </details>

@@ -76,7 +76,7 @@ export async function PUT(req: Request) {
     const salt = typeof body?.salt === 'string' ? body.salt.trim() : '';
     const iv = typeof body?.iv === 'string' ? body.iv.trim() : '';
     const iterations = typeof body?.iterations === 'number' ? Math.floor(body.iterations) : 0;
-    const kind = body?.kind === 'passphrase' ? 'passphrase' : body?.kind === 'password' ? 'password' : null;
+    const kind = body?.kind === 'password' ? 'password' : null;
     const fingerprint = typeof body?.fingerprint === 'string' ? body.fingerprint.trim() : '';
 
     if (!wrappedWmk || !salt || !iv || !fingerprint || !kind || iterations < 100_000) {

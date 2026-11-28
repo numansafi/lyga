@@ -30,8 +30,15 @@ export default function ResetPasswordPage() {
     if (!supabase) return;
     setErrorMsg(null);
     const nextErrors: { password?: string; confirm?: string } = {};
-    if (password.length < 6) {
-      nextErrors.password = 'Password must be at least 6 characters.';
+    if (password.length < 8) {
+      nextErrors.password = 'Password must be at least 8 characters.';
+    } else if (
+      !/[a-z]/.test(password) ||
+      !/[A-Z]/.test(password) ||
+      !/\d/.test(password) ||
+      !/[^A-Za-z0-9]/.test(password)
+    ) {
+      nextErrors.password = 'Include uppercase, lowercase, a number, and a symbol.';
     }
     if (confirmPassword !== password) {
       nextErrors.confirm = 'Passwords do not match.';
@@ -137,7 +144,7 @@ export default function ResetPasswordPage() {
                     aria-invalid={Boolean(fieldErrors.password)}
                     aria-describedby={fieldErrors.password ? 'reset-pw-error' : undefined}
                     className={`${loginStyles.input} ${loginStyles.passwordInput} ${fieldErrors.password ? loginStyles.inputError : ''}`}
-                    placeholder="••••••••"
+                    placeholder="At least 8 characters"
                     value={password}
                     onChange={(e) => {
                       setPassword(e.currentTarget.value);

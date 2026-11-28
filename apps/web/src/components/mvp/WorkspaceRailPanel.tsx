@@ -9,7 +9,6 @@ import {
   Copy,
   Download,
   Eraser,
-  KeyRound,
   LogOut,
   MessageSquare,
   Pencil,
@@ -51,9 +50,6 @@ export interface WorkspaceAccountMenuProps {
   pairUrl: string;
   recoveryCopied: boolean;
   onCopyRecoveryLink: () => void;
-  hasWrappedKey?: boolean;
-  missingKey?: boolean;
-  onOpenSyncPin: () => void;
   itemsCount: number;
   exportingZip: boolean;
   onExportZip: () => void;
@@ -77,9 +73,6 @@ export function WorkspaceAccountMenu({
   pairUrl,
   recoveryCopied,
   onCopyRecoveryLink,
-  hasWrappedKey,
-  missingKey,
-  onOpenSyncPin,
   itemsCount,
   exportingZip,
   onExportZip,
@@ -150,19 +143,6 @@ export function WorkspaceAccountMenu({
           >
             {recoveryCopied ? <Check size={13} /> : <ShieldCheck size={13} />}
             <span>{recoveryCopied ? 'Recovery link copied' : 'Copy backup recovery link'}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.accountPopBtn}
-            disabled={Boolean(missingKey)}
-            onClick={() => {
-              setAccountMenuOpen(false);
-              onOpenSyncPin();
-            }}
-          >
-            <KeyRound size={13} aria-hidden="true" />
-            <span>{hasWrappedKey ? 'Change Sync PIN' : 'Set 6-digit Sync PIN'}</span>
           </button>
           <button
             type="button"

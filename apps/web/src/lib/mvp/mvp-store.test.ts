@@ -296,7 +296,7 @@ describe('mvp session & workspace-store', () => {
       salt: 'salt-2',
       iv: 'iv-2',
       iterations: 600_000,
-      kind: 'passphrase',
+      kind: 'password',
       fingerprint: 'fp-abc',
     });
     assert.deepEqual(rotated, { ok: true });
