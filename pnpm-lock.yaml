@@ -25,10 +25,10 @@ importers:
         version: 3.1177.0
       '@mantine/core':
         specifier: ^7.17.3
-        version: 7.17.8(@mantine/hooks@7.17.8(react@19.3.1))(@types/react@19.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 7.17.8(@mantine/hooks@9.8.2(react@19.3.1))(@types/react@19.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@mantine/hooks':
-        specifier: ^7.17.3
-        version: 7.17.8(react@19.3.1)
+        specifier: ^9.8.2
+        version: 9.8.2(react@19.3.1)
       '@sentry/nextjs':
         specifier: ^11.19.0
         version: 11.19.0(next@15.5.29(@opentelemetry/api@1.10.0)(@playwright/test@1.65.1)(@types/node@26.6.7)(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(react@19.3.1)
@@ -40,7 +40,7 @@ importers:
         version: 0.0.4
       lucide-react:
         specifier: ^1.79.0
-        version: 1.79.0(@types/react@19.3.0)(react@19.3.1)
+        version: 1.79.0(@types/react@19.3.1)(react@19.3.1)
       mailcheck:
         specifier: ^1.1.1
         version: 1.1.1
@@ -375,10 +375,10 @@ packages:
       react: ^18.x || ^19.x
       react-dom: ^18.x || ^19.x
 
-  '@mantine/hooks@7.17.8':
-    resolution: {integrity: sha512-96qygbkTjRhdkzd5HDU8fMziemN/h758/EwrFu7TlWrEP10Vw076u+Ap/sG6OT4RGPZYYoHrTlT+mkCZblWHuw==}
+  '@mantine/hooks@9.8.2':
+    resolution: {integrity: sha512-BZa+6fLEvAxaos2qInPZfNzq0k1WSIIkHA3CdD4quozJhmp7Kt1KE05YAkVPNrPisCx3c5YgmkRqtu9NcRegCw==}
     peerDependencies:
-      react: ^18.x || ^19.x
+      react: ^19.2.0
 
   '@next/env@15.5.29':
     resolution: {integrity: sha512-9SrTiTsgORa+KfhlXXAGC1eSs847E+d2MQTPUX+n7R5XA8g/B6ZitfL6GoYHNMLwG3Hzs1wjDH0/ME5WrGMqBQ==}
@@ -1777,10 +1777,10 @@ snapshots:
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
 
-  '@mantine/core@7.17.8(@mantine/hooks@7.17.8(react@19.3.1))(@types/react@19.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@mantine/core@7.17.8(@mantine/hooks@9.8.2(react@19.3.1))(@types/react@19.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
       '@floating-ui/react': 0.26.28(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@mantine/hooks': 7.17.8(react@19.3.1)
+      '@mantine/hooks': 9.8.2(react@19.3.1)
       clsx: 2.1.1
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
@@ -1791,7 +1791,7 @@ snapshots:
     transitivePeerDependencies:
       - '@types/react'
 
-  '@mantine/hooks@7.17.8(react@19.3.1)':
+  '@mantine/hooks@9.8.2(react@19.3.1)':
     dependencies:
       react: 19.3.1
 
@@ -2322,11 +2322,11 @@ snapshots:
 
   lru-cache@11.5.3: {}
 
-  lucide-react@1.79.0(@types/react@19.3.0)(react@19.3.1):
+  lucide-react@1.79.0(@types/react@19.3.1)(react@19.3.1):
     dependencies:
       react: 19.3.1
     optionalDependencies:
-      '@types/react': 19.3.0
+      '@types/react': 19.3.1
 
   magic-string@0.30.21:
     dependencies:
