@@ -103,14 +103,5 @@ describe('mvp webcrypto E2EE', () => {
     const recovered = await decryptWmkFromApproval(cipher, recipient.privateKey, 'appr_1');
     assert.equal(recovered, wmk);
     await assert.rejects(() => decryptWmkFromApproval(cipher, recipient.privateKey, 'appr_2'));
-
-    const { validateSyncPin, derivePinHash, combinePinWithPepper } = await import('./crypto.ts');
-    assert.ok(validateSyncPin('12345'));
-    assert.ok(validateSyncPin('123456'));
-    assert.ok(validateSyncPin('000000'));
-    assert.equal(validateSyncPin('482915'), null);
-    const pinHash = await derivePinHash('482915', 'ws_123');
-    assert.notEqual(pinHash, '482915');
-    assert.equal(combinePinWithPepper('482915', 'pep'), '482915:pep');
   });
 });

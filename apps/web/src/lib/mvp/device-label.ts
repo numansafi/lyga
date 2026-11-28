@@ -1,6 +1,4 @@
-export function detectDeviceName(): string {
-  if (typeof navigator === 'undefined') return 'Browser';
-  const ua = navigator.userAgent;
+export function detectDeviceNameFromUserAgent(ua: string): string {
   if (/iPhone/i.test(ua)) return 'iPhone';
   if (/iPad/i.test(ua)) return 'iPad';
   if (/Android/i.test(ua)) return 'Android';
@@ -8,6 +6,11 @@ export function detectDeviceName(): string {
   if (/Windows/i.test(ua)) return 'Windows PC';
   if (/Linux/i.test(ua)) return 'Linux PC';
   return 'Browser';
+}
+
+export function detectDeviceName(): string {
+  if (typeof navigator === 'undefined') return 'Browser';
+  return detectDeviceNameFromUserAgent(navigator.userAgent);
 }
 
 export function getSavedDeviceName(deviceId: string): string {

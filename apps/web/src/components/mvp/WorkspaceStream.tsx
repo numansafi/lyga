@@ -95,7 +95,14 @@ export function WorkspaceStream({
           const kind = item.raw.kind;
           const isFile = kind === 'media' || kind === 'file';
           const copyValue = item.bodyText ?? item.meta.title;
-          const isSelf = !item.meta.senderDeviceId || item.meta.senderDeviceId === deviceId;
+          const matchedActivePeer =
+            item.meta.senderDeviceId &&
+            item.meta.senderDeviceId !== deviceId &&
+            deviceOptionMap.get(item.meta.senderDeviceId)?.label !== myDeviceName;
+          const isSelf =
+            !item.meta.senderDeviceId ||
+            item.meta.senderDeviceId === deviceId ||
+            (Boolean(myDeviceName) && item.meta.senderLabel === myDeviceName && !matchedActivePeer);
 
           const actions = (
             <div className={styles.bubbleActions}>

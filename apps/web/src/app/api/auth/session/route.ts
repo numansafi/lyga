@@ -34,6 +34,15 @@ export async function POST(req: Request) {
       if (error || !data.user) {
         return NextResponse.json({ error: 'Invalid or expired sign-in session.' }, { status: 401 });
       }
+      if (!data.user.email_confirmed_at && !data.user.confirmed_at) {
+        return NextResponse.json(
+          {
+            error:
+              'Please confirm your email address using the link we sent you before signing in.',
+          },
+          { status: 403 }
+        );
+      }
       userId = data.user.id;
       email = data.user.email ?? 'user@lyga.app';
     } else if (process.env.NODE_ENV !== 'production') {

@@ -54,7 +54,7 @@ export function useQrLoginSession(opts: {
   }, [enabled, startQrSession]);
 
   useEffect(() => {
-    if (!qrChallenge || qrExpired) return;
+    if (!enabled || !qrChallenge || qrExpired) return;
     let active = true;
     let inFlight = false;
 
@@ -77,7 +77,7 @@ export function useQrLoginSession(opts: {
 
         if (data.status === 'expired') {
           window.clearInterval(timer);
-          setQrExpired(true);
+          void startQrSession();
         } else if (data.status === 'error') {
           window.clearInterval(timer);
           onErrorRef.current(data.error ?? 'Could not pair device.');
@@ -117,7 +117,7 @@ export function useQrLoginSession(opts: {
       window.clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
-  }, [qrChallenge, qrExpired]);
+  }, [enabled, qrChallenge, qrExpired, startQrSession]);
 
   return { qrUrl, qrExpired, startQrSession };
 }

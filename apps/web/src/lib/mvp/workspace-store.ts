@@ -146,8 +146,9 @@ export async function getOrCreateUserWorkspace(
         throw new Error(`Supabase items query error: ${itemsRes.error.message}`);
       }
       const devList = (devsRes.data ?? []) as DeviceRecord[];
-      let activeDevice = devList[0];
-      if (!activeDevice || devList.length < ws.max_devices) {
+      const matchingDevice = devList.find((d) => d.label === label);
+      let activeDevice = matchingDevice ?? devList[0];
+      if (!matchingDevice && (!activeDevice || devList.length < ws.max_devices)) {
         const now = new Date().toISOString();
         const created: DeviceRecord = {
           id: randomUUID(),
@@ -179,6 +180,10 @@ export async function getOrCreateUserWorkspace(
     const ws = data.workspaces.find((w) => w.user_id === userId);
     if (!ws) return null;
     let devs = data.devices.filter((d) => d.workspace_id === ws.id);
+    const matching = devs.find((d) => d.label === label);
+    if (matching) {
+      return { workspaceId: ws.id, deviceId: matching.id };
+    }
     if (devs.length === 0 || devs.length < ws.max_devices) {
       const now = new Date().toISOString();
       const dev: DeviceRecord = {
@@ -988,7 +993,7 @@ export async function getWorkspaceWrappedKey(
       salt: row.wmk_salt,
       iv: row.wmk_iv,
       iterations: row.wmk_kdf_iterations,
-      kind: row.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+      kind: 'password',
       fingerprint: row.wmk_fingerprint ?? '',
     };
   }
@@ -1003,7 +1008,7 @@ export async function getWorkspaceWrappedKey(
     salt: ws.wmk_salt,
     iv: ws.wmk_iv,
     iterations: ws.wmk_kdf_iterations,
-    kind: ws.wmk_wrap_kind === 'passphrase' ? 'passphrase' : 'password',
+    kind: 'password',
     fingerprint: ws.wmk_fingerprint ?? '',
   };
 }

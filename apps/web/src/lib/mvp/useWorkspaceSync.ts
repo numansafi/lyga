@@ -20,6 +20,7 @@ import {
 import { getSavedDeviceName } from '@/lib/mvp/device-label';
 import type { DecryptedFeedItem } from '@/lib/mvp/feed-selectors';
 import { getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
+import { getSupabaseBrowser } from '@/lib/supabase-browser';
 
 interface UseWorkspaceSyncArgs {
   router: AppRouterInstance;
@@ -110,7 +111,9 @@ export function useWorkspaceSync({
             return;
           }
           setWorkspace(null);
-          setErrorMsg('This device was disconnected from the workspace.');
+          await getSupabaseBrowser()?.auth.signOut().catch(() => undefined);
+          router.replace('/login?disconnected=1');
+          return;
         } else {
           setErrorMsg('Unable to load workspace.');
         }

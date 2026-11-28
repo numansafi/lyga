@@ -69,7 +69,7 @@ export function HeroSection({ onGetStarted }: HeroSectionProps) {
           </button>
 
           <p className={styles.heroNote}>
-            Free up to {PLANS.free.maxFileLabel}/file. Sign in with Google or email.
+            Free up to {PLANS.free.maxFileLabel}/file. Sign up with email and password.
           </p>
         </div>
       </div>
