@@ -494,20 +494,24 @@ export default function WorkspacePage() {
   const peerColorMap = useMemo(() => {
     const map = new Map<string, string>();
     const peerClasses = [styles.peer0, styles.peer1, styles.peer2, styles.peer3];
-    let slot = 0;
+    const colorForLabel = (label: string) => {
+      let hash = 0;
+      for (let i = 0; i < label.length; i++) {
+        hash = (hash * 31 + label.charCodeAt(i)) | 0;
+      }
+      return peerClasses[Math.abs(hash) % peerClasses.length];
+    };
 
     for (const dev of devices) {
       if (dev.id !== deviceId && !map.has(dev.id)) {
-        map.set(dev.id, peerClasses[slot % peerClasses.length]);
-        slot += 1;
+        map.set(dev.id, colorForLabel(dev.label || dev.id));
       }
     }
 
     for (const it of items) {
       const sid = it.meta.senderDeviceId;
       if (sid && sid !== deviceId && !map.has(sid)) {
-        map.set(sid, peerClasses[slot % peerClasses.length]);
-        slot += 1;
+        map.set(sid, colorForLabel(it.meta.senderLabel || sid));
       }
     }
 
