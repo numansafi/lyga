@@ -3,7 +3,7 @@
 import type { ReactNode, RefObject } from 'react';
 import dynamic from 'next/dynamic';
 import { Loader } from '@mantine/core';
-import { ChevronDown, Lock, RefreshCw, X } from 'lucide-react';
+import { Lock, RefreshCw, X } from 'lucide-react';
 import styles from './Login.module.css';
 
 const LygaQrCode = dynamic(
@@ -204,22 +204,5 @@ export function EncryptedBadge() {
       <span>Encrypted</span>
       <span className={styles.srOnly}>— end-to-end, keys stay on your devices</span>
     </span>
-  );
-}
-
-export function TroubleSigningInHelp() {
-  return (
-    <details className={styles.helpDisclosure}>
-      <summary className={styles.helpSummary}>
-        <span>Trouble signing in?</span>
-        <ChevronDown size={14} className={styles.helpChevron} aria-hidden="true" />
-      </summary>
-      <div className={styles.helpBody}>
-        <p>
-          <strong>Forgot your password?</strong> Use <em>Forgot password?</em> above to receive a
-          reset link, or scan the QR code from a signed-in device.
-        </p>
-      </div>
-    </details>
   );
 }
