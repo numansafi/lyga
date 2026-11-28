@@ -146,9 +146,8 @@ export async function getOrCreateUserWorkspace(
         throw new Error(`Supabase items query error: ${itemsRes.error.message}`);
       }
       const devList = (devsRes.data ?? []) as DeviceRecord[];
-      const matchingDevice = devList.find((d) => d.label === label);
-      let activeDevice = matchingDevice ?? devList[0];
-      if (!matchingDevice && (!activeDevice || devList.length < ws.max_devices)) {
+      let activeDevice = devList[0];
+      if (!activeDevice || devList.length < ws.max_devices) {
         const now = new Date().toISOString();
         const created: DeviceRecord = {
           id: randomUUID(),
@@ -180,10 +179,6 @@ export async function getOrCreateUserWorkspace(
     const ws = data.workspaces.find((w) => w.user_id === userId);
     if (!ws) return null;
     let devs = data.devices.filter((d) => d.workspace_id === ws.id);
-    const matching = devs.find((d) => d.label === label);
-    if (matching) {
-      return { workspaceId: ws.id, deviceId: matching.id };
-    }
     if (devs.length === 0 || devs.length < ws.max_devices) {
       const now = new Date().toISOString();
       const dev: DeviceRecord = {
