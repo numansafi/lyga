@@ -12,3 +12,4 @@ dist/
 test-results/
 playwright-report/
 supabase/.temp/
+next-env.d.ts
