@@ -20,6 +20,7 @@ import {
   AuthErrorBanner,
   AuthSubmitButton,
   EncryptedBadge,
+  OtpDigitBoxes,
   QrUnlockPanel,
   TroubleSigningInHelp,
   formatAuthError,
@@ -91,13 +92,18 @@ export default function LoginPage() {
     if (stored) {
       setEmail(stored.email);
       setOtpSent(true);
-      setInfoMsg(`Enter the 6-digit code we sent to ${stored.email}.`);
       const remaining = remainingCooldown(stored.sentAt);
       if (remaining > 0) setOtpCooldown(remaining);
     }
 
     return () => mediaQuery.removeEventListener('change', onMediaChange);
   }, []);
+
+  useEffect(() => {
+    if (!infoMsg) return;
+    const timer = window.setTimeout(() => setInfoMsg(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [infoMsg]);
 
   useEffect(() => {
     return () => {
@@ -265,7 +271,6 @@ export default function LoginPage() {
       }
       setOtpSent(true);
       setOtpCooldown(OTP_COOLDOWN_SECONDS);
-      setInfoMsg(`Enter the 6-digit code we sent to ${cleanEmail}.`);
       saveOtpState(cleanEmail);
     } catch {
       setErrorMsg('Unable to send sign-in email.');
@@ -320,7 +325,7 @@ export default function LoginPage() {
     e.preventDefault();
     if (!supabase) return;
     setErrorMsg(null);
-    const cleanCode = otpCode.trim();
+    const cleanCode = otpCode.replace(/\D/g, '');
     if (cleanCode.length !== 6) {
       setFieldErrors({ otp: 'Enter the 6-digit code from your email.' });
       otpInputRef.current?.focus();
@@ -468,6 +473,12 @@ export default function LoginPage() {
 
   return (
     <main className={styles.page}>
+      {infoMsg && (
+        <div className={styles.floatingInfoToast} role="status" aria-live="polite">
+          <span className={styles.floatingInfoDot} aria-hidden="true" />
+          <span>{infoMsg}</span>
+        </div>
+      )}
       <div className={styles.shell}>
         <div className={styles.card}>
           <div className={styles.topRow}>
@@ -568,13 +579,7 @@ export default function LoginPage() {
                 setMode(nextMode);
                 setErrorMsg(null);
                 setGoogleError(null);
-                if (nextMode === 'otp' && otpSent) {
-                  const check = validateAuthEmail(email);
-                  const target = check.valid ? check.normalized : email.trim().toLowerCase();
-                  setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
-                } else {
-                  setInfoMsg(null);
-                }
+                setInfoMsg(null);
                 setFieldErrors({});
                 document.getElementById(`tab-${nextMode}`)?.focus();
               }}
@@ -593,13 +598,7 @@ export default function LoginPage() {
                   setMode('otp');
                   setErrorMsg(null);
                   setGoogleError(null);
-                  if (otpSent) {
-                    const check = validateAuthEmail(email);
-                    const target = check.valid ? check.normalized : email.trim().toLowerCase();
-                    setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
-                  } else {
-                    setInfoMsg(null);
-                  }
+                  setInfoMsg(null);
                   setFieldErrors({});
                 }}
               >
@@ -635,33 +634,27 @@ export default function LoginPage() {
             {mode === 'otp' ? (
               otpSent ? (
                 <form className={styles.form} noValidate onSubmit={(e) => void handleVerifyOtp(e)}>
-                  {infoMsg && (
-                    <div className={styles.infoBanner} role="status">
-                      <span>{infoMsg}</span>
-                    </div>
-                  )}
+                  <div className={styles.otpSubtitle} role="status">
+                    <Mail size={15} aria-hidden="true" />
+                    <span>
+                      We sent a 6-digit code to <strong>{email}</strong>.
+                    </span>
+                  </div>
                   <div className={styles.fieldGroup}>
                     <label htmlFor="login-otp-code" className={styles.label}>
                       6-digit code from email
                     </label>
-                    <input
+                    <OtpDigitBoxes
                       id="login-otp-code"
-                      ref={otpInputRef}
-                      type="text"
-                      inputMode="numeric"
-                      autoComplete="one-time-code"
-                      maxLength={6}
-                      aria-invalid={Boolean(fieldErrors.otp)}
-                      aria-describedby={fieldErrors.otp ? 'login-otp-error' : undefined}
-                      className={`${styles.input} ${styles.otpInput} ${fieldErrors.otp ? styles.inputError : ''}`}
-                      placeholder="123456"
                       value={otpCode}
-                      onChange={(e) => {
-                        setOtpCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 6));
+                      firstInputRef={otpInputRef}
+                      hasError={Boolean(fieldErrors.otp)}
+                      errorId="login-otp-error"
+                      onChange={(nextCode) => {
+                        setOtpCode(nextCode);
                         if (fieldErrors.otp) setFieldErrors((prev) => ({ ...prev, otp: undefined }));
                         if (errorMsg) setErrorMsg(null);
                       }}
-                      required
                     />
                     {fieldErrors.otp && (
                       <p id="login-otp-error" className={styles.fieldError} role="alert">
@@ -805,11 +798,6 @@ export default function LoginPage() {
                     </p>
                   ) : null}
                 </div>
-                {infoMsg && (
-                  <div className={styles.infoBanner} role="status">
-                    <span>{infoMsg}</span>
-                  </div>
-                )}
                 {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
                 <AuthSubmitButton loading={loading} disabled={loading || secondaryLoading}>
                   {isSignUp ? 'Create account' : 'Sign in'}
