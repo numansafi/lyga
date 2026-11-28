@@ -26,10 +26,20 @@ export function formatAuthError(raw: string | undefined | null, fallback: string
     return 'An account with this email already exists. Sign in or use Email code.';
   }
   if (lower.includes('token has expired') || lower.includes('otp_expired') || lower.includes('invalid token')) {
-    return 'That code is invalid or expired. Request a fresh 6-digit code and try again.';
+    return 'That code is invalid or expired. Request a new sign-in code and try again.';
   }
   if (lower.includes('rate limit') || lower.includes('too many requests') || lower.includes('security purposes')) {
     return 'Too many attempts right now. Wait a moment and try again.';
+  }
+  if (
+    lower.includes('weak') ||
+    lower.includes('should contain at least one character') ||
+    lower.includes('password_too_weak')
+  ) {
+    return 'Password must be at least 8 characters and include uppercase, lowercase, a number, and a symbol.';
+  }
+  if (lower.includes('different from the old password') || lower.includes('same_password')) {
+    return 'New password must be different from your current password.';
   }
   if (lower.includes('failed to fetch') || lower.includes('network')) {
     return 'Could not reach the sign-in service. Check your connection and try again.';
