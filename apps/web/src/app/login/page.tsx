@@ -29,6 +29,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otpCode, setOtpCode] = useState('');
+  const [otpCooldown, setOtpCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const { qrUrl, qrExpired, startQrSession } = useQrLoginSession({
@@ -141,9 +142,40 @@ export default function LoginPage() {
         return;
       }
       setOtpSent(true);
+      setOtpCooldown(30);
       setInfoMsg('Check your email for a 6-digit code or sign-in link.');
     } catch {
       setErrorMsg('Unable to send sign-in email.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (otpCooldown <= 0) return;
+    const timer = window.setTimeout(() => setOtpCooldown((c) => Math.max(0, c - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [otpCooldown]);
+
+  const handleResendOtp = async () => {
+    if (!supabase || otpCooldown > 0) return;
+    const check = validateAuthEmail(email);
+    if (!check.valid) return;
+    setErrorMsg(null);
+    setLoading(true);
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email: check.normalized,
+        options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) {
+        setErrorMsg(error.message);
+        return;
+      }
+      setOtpCooldown(30);
+      setInfoMsg('Sent a fresh 6-digit code to your email.');
+    } catch {
+      setErrorMsg('Unable to resend sign-in email.');
     } finally {
       setLoading(false);
     }
@@ -215,7 +247,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(check.normalized, {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
       });
       if (error) {
         setErrorMsg(error.message);
@@ -438,19 +470,30 @@ export default function LoginPage() {
                   >
                     Verify &amp; continue →
                   </Button>
-                  <button
-                    type="button"
-                    className={styles.linkBtn}
-                    onClick={() => {
-                      setOtpSent(false);
-                      setOtpCode('');
-                      setInfoMsg(null);
-                      setErrorMsg(null);
-                      setFieldErrors({});
-                    }}
-                  >
-                    Use a different email
-                  </button>
+                  <div className={styles.otpActionsRow}>
+                    <button
+                      type="button"
+                      className={styles.linkBtn}
+                      disabled={loading || otpCooldown > 0}
+                      onClick={() => void handleResendOtp()}
+                    >
+                      {otpCooldown > 0 ? `Resend code (${otpCooldown}s)` : 'Resend code'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.linkBtn}
+                      onClick={() => {
+                        setOtpSent(false);
+                        setOtpCode('');
+                        setOtpCooldown(0);
+                        setInfoMsg(null);
+                        setErrorMsg(null);
+                        setFieldErrors({});
+                      }}
+                    >
+                      Use a different email
+                    </button>
+                  </div>
                 </form>
               ) : (
                 <form className={styles.form} noValidate onSubmit={(e) => void handleSendOtp(e)}>

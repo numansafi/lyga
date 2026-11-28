@@ -1,5 +1,6 @@
 import { cookies } from 'next/headers.js';
 import { NextResponse } from 'next/server.js';
+import { PLANS } from '../pricingplan.ts';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from './auth.ts';
 import {
   decodeSessionToken,
@@ -39,12 +40,12 @@ export function mapStoreError(
   switch (reason) {
     case 'file_too_large':
       return NextResponse.json(
-        { error: customMessages?.file_too_large ?? 'Free plan supports files up to 500 MB.', code: 'FILE_TOO_LARGE' },
+        { error: customMessages?.file_too_large ?? `Free plan supports files up to ${PLANS.free.maxFileLabel}.`, code: 'FILE_TOO_LARGE' },
         { status: 413 }
       );
     case 'storage_full':
       return NextResponse.json(
-        { error: customMessages?.storage_full ?? 'Free plan 2 GB storage limit reached.', code: 'STORAGE_FULL' },
+        { error: customMessages?.storage_full ?? `Free plan ${PLANS.free.maxStorageLabel} storage limit reached.`, code: 'STORAGE_FULL' },
         { status: 413 }
       );
     case 'device_limit':
@@ -96,4 +97,24 @@ export async function withWorkspaceSession(
     console.error(`[${logLabel}]`, err);
     return NextResponse.json({ error: errorMessage }, { status: 500 });
   }
+}
+
+const rateLimitStore = new Map<string, { count: number; resetAt: number }>();
+
+/** Best-effort per-instance sliding-window rate limiter for anonymous endpoints. */
+export function checkRateLimit(req: Request, bucket: string, limit = 20, windowMs = 60_000): boolean {
+  const fwd = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim();
+  const ip = fwd || req.headers.get('x-real-ip')?.trim() || 'unknown';
+  const key = `${bucket}:${ip}`;
+  const now = Date.now();
+  const entry = rateLimitStore.get(key);
+  if (!entry || entry.resetAt <= now) {
+    rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  if (entry.count >= limit) {
+    return false;
+  }
+  entry.count += 1;
+  return true;
 }

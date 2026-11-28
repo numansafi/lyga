@@ -204,7 +204,11 @@ export function buildCategoryGroups(params: {
     sortBy === 'largest' && filter !== 'file' && filter !== 'media' ? 'newest' : sortBy;
 
   const matching = items.filter((it) => {
-    if (it.raw.kind !== filter) return false;
+    const kindMatches =
+      filter === 'text'
+        ? it.raw.kind === 'text' || it.raw.kind === 'code'
+        : it.raw.kind === filter;
+    if (!kindMatches) return false;
     const senderId = it.meta.senderDeviceId ?? deviceId ?? '';
     if (deviceFilter !== 'all' && senderId !== deviceFilter) return false;
     if (q) {

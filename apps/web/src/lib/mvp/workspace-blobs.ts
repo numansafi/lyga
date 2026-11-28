@@ -2,13 +2,19 @@
 
 import { decryptFileChunked } from './crypto';
 import { getFileExtension, type DecryptedFeedItem } from './feed-selectors';
+import { downloadV2Streamed } from './multipart-client';
 import { buildZipArchive, type ZipEntryInput } from './zip';
 
 export async function fetchDecryptedPlainBlob(
   cryptoKey: CryptoKey,
-  item: DecryptedFeedItem
+  item: DecryptedFeedItem,
+  hkdfKey?: CryptoKey | null
 ): Promise<Blob | null> {
   if (!item.raw.blob_key) return null;
+  if (item.meta.formatVersion === 2 && hkdfKey) {
+    const res = await downloadV2Streamed(hkdfKey, item, { saveToDisk: false });
+    return res.streamedToDisk ? null : res.blob;
+  }
   const urlRes = await fetch(`/api/mvp/download-url?id=${encodeURIComponent(item.raw.id)}`);
   if (!urlRes.ok) return null;
   const { downloadUrl } = (await urlRes.json()) as { downloadUrl: string };
@@ -44,7 +50,8 @@ export async function convertHeicIfNeeded(blob: Blob, item: DecryptedFeedItem): 
 
 export async function exportItemsToZip(
   cryptoKey: CryptoKey,
-  items: DecryptedFeedItem[]
+  items: DecryptedFeedItem[],
+  hkdfKey?: CryptoKey | null
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const entries: ZipEntryInput[] = [];
   const notesLines: string[] = [];
@@ -54,7 +61,7 @@ export async function exportItemsToZip(
     items
       .filter((item) => item.raw.kind === 'media' || item.raw.kind === 'file')
       .map(async (item): Promise<ZipEntryInput | null> => {
-        const plainBlob = await fetchDecryptedPlainBlob(cryptoKey, item);
+        const plainBlob = await fetchDecryptedPlainBlob(cryptoKey, item, hkdfKey);
         if (!plainBlob) return null;
         const buf = new Uint8Array(await plainBlob.arrayBuffer());
         return {

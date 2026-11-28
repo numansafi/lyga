@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import { after, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { createJsonFileStore } from '@/lib/local-json-store';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from '@/lib/mvp/auth';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
@@ -65,17 +65,6 @@ export async function POST(req: Request) {
       }
       if (insertErr?.code === 'PGRST205') {
         console.warn('[mvp feedback] public.feedback table not found; run supabase/migrations/0004_feedback.sql');
-      }
-
-      if (entry.email) {
-        const email = entry.email;
-        after(async () => {
-          await supabase
-            .from('waitlist')
-            .update({ pain_note: `[${category}] ${message.slice(0, 500)}` })
-            .eq('email', email)
-            .then(() => undefined, () => undefined);
-        });
       }
     } else {
       await localFeedbackStore.withLock(async () => {

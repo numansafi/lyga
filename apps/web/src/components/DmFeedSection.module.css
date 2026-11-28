@@ -2,6 +2,7 @@
   background-color: var(--bg-surface);
   border-top: 1px solid var(--border-subtle);
   padding: 56px 24px 72px;
+  contain: layout style;
 }
 
 .thread {
@@ -9,7 +10,13 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 36px;
+}
+
+.exchangeGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .threadDivider {
@@ -132,6 +139,7 @@
   font-size: 15px;
   line-height: 1.55;
   color: var(--text-primary);
+  text-wrap: pretty;
 }
 
 .senderMetaOutgoing {
@@ -384,6 +392,7 @@
   font-weight: 700;
   letter-spacing: -0.015em;
   color: var(--text-primary);
+  text-wrap: balance;
 }
 
 .pricingMsgHeader {
@@ -395,6 +404,53 @@
   margin-bottom: 14px;
 }
 
+.billingToggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 9px;
+  border: 1px solid var(--border-subtle);
+  background-color: var(--bg-surface);
+  gap: 3px;
+}
+
+.billingBtn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.billingBtn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+.billingBtnActive {
+  background-color: var(--bg-page);
+  color: var(--text-primary);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.savePill {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background-color: var(--accent-primary-tint);
+  color: var(--accent-primary);
+}
+
 .compareTabs {
   display: flex;
   flex-wrap: wrap;
@@ -404,12 +460,15 @@
 
 .compareTab {
   appearance: none;
+  display: inline-flex;
+  align-items: center;
+  min-height: 38px;
   border: 1px solid var(--border-subtle);
   background-color: var(--bg-surface);
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 12.5px;
   font-weight: 600;
-  padding: 6px 12px;
+  padding: 7px 14px;
   border-radius: 999px;
   cursor: pointer;
   transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
@@ -616,8 +675,15 @@
 .priceRow {
   display: flex;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 16px;
+}
+
+.yearlyTotal {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent-primary);
 }
 
 .price {
@@ -634,9 +700,14 @@
 }
 
 .strikePrice {
-  font-size: 15px;
-  color: var(--text-secondary);
+  font-size: 20px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  opacity: 0.72;
   text-decoration: line-through;
+  text-decoration-thickness: 2.5px;
+  text-decoration-color: #dc2626;
 }
 
 .statStrip {
@@ -774,6 +845,12 @@
 }
 
 @media (max-width: 760px) {
+  .billingBtn,
+  .compareTab,
+  .faqTrigger {
+    min-height: 44px;
+  }
+
   .canvas {
     padding: 36px 16px 56px;
   }
@@ -829,7 +906,11 @@
 
 @media (max-width: 480px) {
   .thread {
-    gap: 20px;
+    gap: 28px;
+  }
+
+  .exchangeGroup {
+    gap: 10px;
   }
 
   .compareMsgCard,
@@ -842,4 +923,52 @@
   .planCard {
     padding: 16px;
   }
+}
+
+.closingCtaCard {
+  max-width: 440px;
+  width: 100%;
+  background: linear-gradient(155deg, #0d4743 0%, #115e59 100%);
+  color: #ffffff;
+  border-radius: 18px 18px 4px 18px;
+  padding: 18px 20px;
+  box-shadow: 0 12px 28px rgba(17, 94, 89, 0.22);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.closingCtaCopy {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.45;
+  color: #f0fdfa;
+  text-wrap: pretty;
+}
+
+.closingCtaBtn {
+  align-self: flex-start;
+  min-height: 44px;
+  background-color: #5eead4 !important;
+  color: #042220 !important;
+  font-weight: 700 !important;
+  border-radius: 999px !important;
+}
+
+.closingCtaBtn:hover {
+  background-color: #7cf2df !important;
+}
+
+.siteFooter {
+  border-top: 1px solid var(--border-subtle);
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.siteFooterBrand {
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
 }

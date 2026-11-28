@@ -42,9 +42,10 @@ import {
   UserX,
   X,
 } from 'lucide-react';
+import { PLANS } from '@/lib/pricingplan';
 import {
-  FREE_EXPIRY_DAYS,
-  FREE_MAX_STORAGE_BYTES,
+  getWorkspaceLimits,
+  MULTIPART_THRESHOLD_BYTES,
   type FeedItemKind,
   type FeedItemRecord,
   type WorkspaceRecord,
@@ -56,9 +57,11 @@ import {
   encryptFileChunked,
   encryptString,
   generateWorkspaceKey,
+  importWorkspaceHkdfKey,
   importWorkspaceKey,
   type DecryptedItemMeta,
 } from '@/lib/mvp/crypto';
+import { downloadV2Streamed, uploadFileMultipart } from '@/lib/mvp/multipart-client';
 import { getSavedDeviceName, saveDeviceName } from '@/lib/mvp/device-label';
 import {
   buildCategoryGroups,
@@ -150,6 +153,7 @@ export default function WorkspacePage() {
   const [usedBytes, setUsedBytes] = useState(0);
   const [items, setItems] = useState<DecryptedFeedItem[]>([]);
   const [cryptoKey, setCryptoKey] = useState<CryptoKey | null>(null);
+  const [hkdfKey, setHkdfKey] = useState<CryptoKey | null>(null);
   const [pairUrl, setPairUrl] = useState('');
   const [filter, setFilter] = useState<TabFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
@@ -203,6 +207,11 @@ export default function WorkspacePage() {
   const [deleteAccountOpen, setDeleteAccountOpen] = useState(false);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [missingKey, setMissingKey] = useState(false);
+  const [recoveryDraft, setRecoveryDraft] = useState('');
+  const [unlockingKey, setUnlockingKey] = useState(false);
+  const [confirmDisconnectId, setConfirmDisconnectId] = useState<string | null>(null);
+  const [undoDelete, setUndoDelete] = useState<{ id: string; label: string } | null>(null);
   const [deferredInstallPrompt, setDeferredInstallPrompt] = useState<{
     prompt: () => Promise<void>;
     userChoice: Promise<{ outcome: string }>;
@@ -223,6 +232,14 @@ export default function WorkspacePage() {
   const previewUrlsRef = useRef<Record<string, string>>({});
   const previewInFlightRef = useRef<Map<string, Promise<string | null>>>(new Map());
   const loadSeqRef = useRef(0);
+  const uploadXhrRef = useRef<XMLHttpRequest | null>(null);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const uploadCancelledRef = useRef(false);
+  const pendingDeleteRef = useRef<{
+    id: string;
+    item: DecryptedFeedItem;
+    timer: number;
+  } | null>(null);
 
   const decryptItems = useCallback(
     async (rawItems: FeedItemRecord[], key: CryptoKey): Promise<DecryptedFeedItem[]> => {
@@ -299,13 +316,32 @@ export default function WorkspacePage() {
 
       let wmk = await getWorkspaceKey(data.workspace.id);
       if (!wmk) {
+        if (data.items.length > 0 || data.devices.length > 1) {
+          setMissingKey(true);
+          setCryptoKey(null);
+          setHkdfKey(null);
+          setPairUrl('');
+          setItems(
+            data.items.map((raw) => ({
+              raw,
+              meta: { title: 'Encrypted item (key unavailable on this browser)' },
+              bodyText: null,
+            }))
+          );
+          return;
+        }
         wmk = generateWorkspaceKey();
         await saveWorkspaceKey(data.workspace.id, wmk);
       }
 
-      const imported = await importWorkspaceKey(wmk);
+      setMissingKey(false);
+      const [imported, importedHkdf] = await Promise.all([
+        importWorkspaceKey(wmk),
+        importWorkspaceHkdfKey(wmk),
+      ]);
       if (seq !== loadSeqRef.current) return;
       setCryptoKey(imported);
+      setHkdfKey(importedHkdf);
 
       const url = `${window.location.origin}/pair?code=${encodeURIComponent(data.workspace.pair_code)}#wmk=${wmk}`;
       setPairUrl(url);
@@ -654,6 +690,47 @@ export default function WorkspacePage() {
           senderLabel: myDeviceName,
         };
 
+        if (file.size > MULTIPART_THRESHOLD_BYTES && hkdfKey && workspace) {
+          uploadCancelledRef.current = false;
+          const abortController = new AbortController();
+          uploadAbortRef.current = abortController;
+          setUploadStatus({
+            fileName: file.name,
+            sizeBytes: file.size,
+            stage: 'Uploading',
+            pct: 1,
+          });
+          const mpResult = await uploadFileMultipart(
+            workspace.id,
+            file,
+            cryptoKey,
+            hkdfKey,
+            meta,
+            kind,
+            {
+            signal: abortController.signal,
+            onProgress: (pct) => {
+              setUploadStatus({
+                fileName: file.name,
+                sizeBytes: file.size,
+                stage: pct >= 96 ? 'Saving' : 'Uploading',
+                pct,
+              });
+            },
+          });
+          uploadAbortRef.current = null;
+          if (mpResult.ok) {
+            uploadedAny = true;
+            continue;
+          }
+          if (mpResult.cancelled || uploadCancelledRef.current) {
+            setInfoMsg('Upload cancelled.');
+          } else {
+            setErrorMsg(mpResult.error);
+          }
+          break;
+        }
+
         const [prepRes, encryptedMeta] = await Promise.all([
           fetch('/api/mvp/upload-url', {
             method: 'POST',
@@ -670,7 +747,11 @@ export default function WorkspacePage() {
           } | null;
           setErrorMsg(err?.error ?? 'Upload limit reached.');
           if (err?.code === 'FILE_TOO_LARGE' || err?.code === 'STORAGE_FULL') {
-            setErrorMsg(`${err?.error ?? 'Free limit reached.'} Pro (£5/mo — 100 GB) is coming soon.`);
+            setErrorMsg(
+              workspace?.plan === 'pro'
+                ? (err?.error ?? 'Vault storage limit reached.')
+                : `${err?.error ?? 'Free limit reached.'} Upgrade to Pro (£3.75/mo yearly) for 5 GB files & 100 GB vault.`
+            );
           }
           break;
         }
@@ -696,8 +777,10 @@ export default function WorkspacePage() {
           pct: 50,
         });
 
+        uploadCancelledRef.current = false;
         const putOk = await new Promise<boolean>((resolve) => {
           const xhr = new XMLHttpRequest();
+          uploadXhrRef.current = xhr;
           xhr.open('PUT', uploadUrl);
           xhr.setRequestHeader('Content-Type', 'application/octet-stream');
           xhr.upload.onprogress = (ev) => {
@@ -713,9 +796,15 @@ export default function WorkspacePage() {
           };
           xhr.onload = () => resolve(xhr.status >= 200 && xhr.status < 300);
           xhr.onerror = () => resolve(false);
+          xhr.onabort = () => resolve(false);
           xhr.send(blob);
         });
+        uploadXhrRef.current = null;
 
+        if (uploadCancelledRef.current) {
+          setInfoMsg('Upload cancelled.');
+          break;
+        }
         if (!putOk) {
           setErrorMsg('Failed to upload encrypted file.');
           break;
@@ -767,9 +856,13 @@ export default function WorkspacePage() {
   const fetchDecryptedPlainBlob = useCallback(
     async (item: DecryptedFeedItem): Promise<Blob | null> => {
       if (!cryptoKey) return null;
+      if (item.meta.formatVersion === 2 && hkdfKey && item.raw.blob_key) {
+        const res = await downloadV2Streamed(hkdfKey, item, { saveToDisk: false });
+        return res.streamedToDisk ? null : res.blob;
+      }
       return fetchPlainBlobWithKey(cryptoKey, item);
     },
-    [cryptoKey]
+    [cryptoKey, hkdfKey]
   );
 
   const getDecryptedBlobUrl = useCallback(
@@ -918,13 +1011,65 @@ export default function WorkspacePage() {
     setDeferredInstallPrompt(null);
   };
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const billing = params.get('billing');
+    if (billing === 'success') {
+      setInfoMsg('Welcome to Lyga Pro! 5 GB uploads and 100 GB vault are now active.');
+      void loadWorkspace();
+    } else if (billing === 'cancelled') {
+      setInfoMsg('Checkout cancelled — no changes were made to your plan.');
+    }
+    if (billing) {
+      params.delete('billing');
+      const nextQuery = params.toString();
+      const nextUrl = `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ''}${window.location.hash}`;
+      window.history.replaceState(null, '', nextUrl);
+    }
+  }, [loadWorkspace]);
+
+  const handleStartCheckout = async (interval: 'monthly' | 'yearly' = 'yearly') => {
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/billing/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ interval }),
+      });
+      const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!res.ok || !data?.url) {
+        setErrorMsg(data?.error ?? 'Unable to start Stripe checkout.');
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setErrorMsg('Unable to start Stripe checkout.');
+    }
+  };
+
+  const handleManageBilling = async () => {
+    setErrorMsg(null);
+    try {
+      const res = await fetch('/api/billing/portal', { method: 'POST' });
+      const data = (await res.json().catch(() => null)) as { url?: string; error?: string } | null;
+      if (!res.ok || !data?.url) {
+        setErrorMsg(data?.error ?? 'Unable to open billing portal.');
+        return;
+      }
+      window.location.assign(data.url);
+    } catch {
+      setErrorMsg('Unable to open billing portal.');
+    }
+  };
+
   const handleExportZip = async () => {
     if (!cryptoKey || items.length === 0 || exportingZip) return;
     setAccountMenuOpen(false);
     setExportingZip(true);
     setErrorMsg(null);
     try {
-      const result = await exportItemsToZip(cryptoKey, items);
+      const result = await exportItemsToZip(cryptoKey, items, hkdfKey);
       if (!result.ok) {
         setErrorMsg(result.error);
       }
@@ -1016,7 +1161,17 @@ export default function WorkspacePage() {
     setDownloadingId(item.raw.id);
     setErrorMsg(null);
     try {
-      const plainBlob = await fetchDecryptedPlainBlob(item);
+      let plainBlob: Blob | null = null;
+      if (item.meta.formatVersion === 2 && hkdfKey) {
+        const streamed = await downloadV2Streamed(hkdfKey, item, { saveToDisk: true });
+        if (streamed.streamedToDisk) {
+          return;
+        }
+        plainBlob = streamed.blob;
+      } else {
+        plainBlob = await fetchDecryptedPlainBlob(item);
+      }
+
       if (!plainBlob) {
         setErrorMsg('Failed to decrypt downloaded file.');
         return;
@@ -1029,7 +1184,10 @@ export default function WorkspacePage() {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
-    } catch {
+    } catch (err) {
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       setErrorMsg('Failed to decrypt downloaded file.');
     } finally {
       setDownloadingId(null);
@@ -1124,41 +1282,7 @@ export default function WorkspacePage() {
     setSelectedIds((curr) => (curr.includes(id) ? curr.filter((x) => x !== id) : [...curr, id]));
   };
 
-  const handleBulkDelete = async () => {
-    if (selectedIds.length === 0) return;
-    const targets = Array.from(new Set(selectedIds));
-    setSelectedIds([]);
-    await Promise.all(targets.map((id) => handleDelete(id)));
-  };
-
-  const handleBulkDownload = async () => {
-    const fileItems = items.filter(
-      (it) => selectedIds.includes(it.raw.id) && (it.raw.kind === 'media' || it.raw.kind === 'file')
-    );
-    for (const it of fileItems) {
-      await handleDownload(it);
-    }
-    setSelectedIds([]);
-  };
-
-  const handleDelete = async (id: string) => {
-    const target = items.find((it) => it.raw.id === id);
-
-    setItems((curr) => curr.filter((it) => it.raw.id !== id));
-    if (target?.raw.size_bytes) {
-      setUsedBytes((curr) => Math.max(0, curr - Number(target.raw.size_bytes || 0)));
-    }
-    const cachedBlobUrl = previewUrlsRef.current[id];
-    if (cachedBlobUrl) {
-      URL.revokeObjectURL(cachedBlobUrl);
-      delete previewUrlsRef.current[id];
-      setPreviewUrls((curr) => {
-        const next = { ...curr };
-        delete next[id];
-        return next;
-      });
-    }
-
+  const performServerDelete = async (id: string, target?: DecryptedFeedItem) => {
     try {
       const res = await fetch(`/api/mvp/items?id=${encodeURIComponent(id)}`, { method: 'DELETE' });
       if (!res.ok) throw new Error('delete failed');
@@ -1174,6 +1298,111 @@ export default function WorkspacePage() {
         }
       }
       setErrorMsg('Unable to delete item.');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    const targets = Array.from(new Set(selectedIds));
+    setSelectedIds([]);
+    const targetItems = items.filter((it) => targets.includes(it.raw.id));
+    setItems((curr) => curr.filter((it) => !targets.includes(it.raw.id)));
+    const removedBytes = targetItems.reduce((sum, it) => sum + Number(it.raw.size_bytes || 0), 0);
+    if (removedBytes > 0) {
+      setUsedBytes((curr) => Math.max(0, curr - removedBytes));
+    }
+    await Promise.all(targetItems.map((it) => performServerDelete(it.raw.id, it)));
+  };
+
+  const handleBulkDownload = async () => {
+    const fileItems = items.filter(
+      (it) => selectedIds.includes(it.raw.id) && (it.raw.kind === 'media' || it.raw.kind === 'file')
+    );
+    for (const it of fileItems) {
+      await handleDownload(it);
+    }
+    setSelectedIds([]);
+  };
+
+  const handleDelete = (id: string) => {
+    const target = items.find((it) => it.raw.id === id);
+    if (!target) return;
+
+    if (pendingDeleteRef.current) {
+      window.clearTimeout(pendingDeleteRef.current.timer);
+      const prev = pendingDeleteRef.current;
+      pendingDeleteRef.current = null;
+      void performServerDelete(prev.id, prev.item);
+    }
+
+    setItems((curr) => curr.filter((it) => it.raw.id !== id));
+    if (target.raw.size_bytes) {
+      setUsedBytes((curr) => Math.max(0, curr - Number(target.raw.size_bytes || 0)));
+    }
+    const cachedBlobUrl = previewUrlsRef.current[id];
+    if (cachedBlobUrl) {
+      URL.revokeObjectURL(cachedBlobUrl);
+      delete previewUrlsRef.current[id];
+      setPreviewUrls((curr) => {
+        const next = { ...curr };
+        delete next[id];
+        return next;
+      });
+    }
+
+    const label = target.meta.fileName || target.meta.title || 'Item';
+    const timer = window.setTimeout(() => {
+      if (pendingDeleteRef.current?.id === id) {
+        pendingDeleteRef.current = null;
+        setUndoDelete(null);
+      }
+      void performServerDelete(id, target);
+    }, 5000);
+
+    pendingDeleteRef.current = { id, item: target, timer };
+    setUndoDelete({ id, label });
+  };
+
+  const handleUndoDelete = () => {
+    const pending = pendingDeleteRef.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timer);
+    pendingDeleteRef.current = null;
+    setUndoDelete(null);
+    setItems((curr) =>
+      curr.some((it) => it.raw.id === pending.id)
+        ? curr
+        : [...curr, pending.item].sort((a, b) => b.raw.created_at.localeCompare(a.raw.created_at))
+    );
+    if (pending.item.raw.size_bytes) {
+      setUsedBytes((curr) => curr + Number(pending.item.raw.size_bytes || 0));
+    }
+  };
+
+  const handleUnlockWithLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!workspace) return;
+    const raw = recoveryDraft.trim();
+    if (!raw) return;
+    setUnlockingKey(true);
+    setErrorMsg(null);
+    try {
+      let candidate = raw;
+      if (raw.includes('#')) {
+        const hash = raw.split('#')[1] ?? '';
+        const hashParams = new URLSearchParams(hash);
+        candidate = hashParams.get('wmk') ?? hashParams.get('k') ?? raw;
+      }
+      await importWorkspaceKey(candidate);
+      await saveWorkspaceKey(workspace.id, candidate);
+      setRecoveryDraft('');
+      setMissingKey(false);
+      setInfoMsg('Workspace unlocked.');
+      await loadWorkspace();
+    } catch {
+      setErrorMsg('Invalid recovery link or key. Copy the full backup recovery link from a paired device.');
+    } finally {
+      setUnlockingKey(false);
     }
   };
 
@@ -1320,7 +1549,9 @@ export default function WorkspacePage() {
         {showLabel && (
           <span className={styles.accountTriggerMeta}>
             <span className={styles.accountTriggerName}>{userEmail ?? 'Account'}</span>
-            <span className={styles.accountTriggerPlan}>Free plan</span>
+            <span className={styles.accountTriggerPlan}>
+              {workspace?.plan === 'pro' ? 'Pro plan' : 'Free plan'}
+            </span>
           </span>
         )}
       </button>
@@ -1337,7 +1568,9 @@ export default function WorkspacePage() {
                 <span className={styles.accountPopEmail}>
                   {userEmail ?? 'Signed in'}
                 </span>
-                <span className={styles.accountPlanPill}>Free plan</span>
+                <span className={styles.accountPlanPill}>
+                  {workspace?.plan === 'pro' ? 'Pro plan' : 'Free plan'}
+                </span>
               </div>
               <div className={styles.railHairline} />
             </>
@@ -1391,18 +1624,47 @@ export default function WorkspacePage() {
             <span>Send feedback</span>
           </button>
           <div className={styles.railHairline} />
-          <button
-            type="button"
-            role="menuitem"
-            className={styles.accountPopBtn}
-            onClick={() => {
-              setAccountMenuOpen(false);
-              setInfoMsg('Pro (£5/mo — 100 GB & 5 GB files) is coming soon.');
-            }}
-          >
-            <Sparkles size={13} aria-hidden="true" style={{ color: '#5eead4' }} />
-            <span style={{ color: '#5eead4' }}>Upgrade to Pro · £5/mo →</span>
-          </button>
+          {workspace?.plan === 'pro' ? (
+            <button
+              type="button"
+              role="menuitem"
+              className={styles.accountPopBtn}
+              onClick={() => {
+                setAccountMenuOpen(false);
+                void handleManageBilling();
+              }}
+            >
+              <Sparkles size={13} aria-hidden="true" style={{ color: '#5eead4' }} />
+              <span style={{ color: '#5eead4' }}>Pro · Manage billing →</span>
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.accountPopBtn}
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  void handleStartCheckout('yearly');
+                }}
+              >
+                <Sparkles size={13} aria-hidden="true" style={{ color: '#5eead4' }} />
+                <span style={{ color: '#5eead4' }}>Upgrade Pro · £3.75/mo (Yearly) →</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className={styles.accountPopBtn}
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  void handleStartCheckout('monthly');
+                }}
+              >
+                <Sparkles size={13} aria-hidden="true" />
+                <span>Upgrade Monthly · £5/mo →</span>
+              </button>
+            </>
+          )}
           <button
             type="button"
             role="menuitem"
@@ -1613,12 +1875,30 @@ export default function WorkspacePage() {
                       <Pencil size={12} />
                     </button>
                   )
+                ) : confirmDisconnectId === dev.id ? (
+                  <button
+                    type="button"
+                    className={`${styles.removeDevBtn} ${styles.removeDevConfirm}`}
+                    aria-label={`Confirm disconnect ${label}`}
+                    onClick={() => {
+                      setConfirmDisconnectId(null);
+                      void handleRemoveDevice(dev.id);
+                    }}
+                  >
+                    Confirm?
+                  </button>
                 ) : (
                   <button
                     type="button"
                     className={styles.removeDevBtn}
                     aria-label={`Disconnect ${label}`}
-                    onClick={() => void handleRemoveDevice(dev.id)}
+                    onClick={() => {
+                      setConfirmDisconnectId(dev.id);
+                      window.setTimeout(
+                        () => setConfirmDisconnectId((curr) => (curr === dev.id ? null : curr)),
+                        4000
+                      );
+                    }}
                   >
                     Disconnect
                   </button>
@@ -1631,11 +1911,13 @@ export default function WorkspacePage() {
     </div>
   );
 
+  const workspaceLimits = getWorkspaceLimits(workspace);
+
   const renderStorageCard = () => (
     <div className={styles.railSection}>
       <div className={styles.storageRow}>
         <span>Storage</span>
-        <span>{formatBytes(usedBytes)} / {formatBytes(FREE_MAX_STORAGE_BYTES)}</span>
+        <span>{formatBytes(usedBytes)} / {formatBytes(workspaceLimits.maxStorageBytes)}</span>
       </div>
       <div className={styles.vaultBarTrack} aria-hidden="true">
         {vaultBreakdown.mediaPct > 0 && (
@@ -1700,8 +1982,14 @@ export default function WorkspacePage() {
       </div>
       <div className={styles.vaultDivider} />
       <div className={styles.vaultMetaRow}>
-        <span>Auto-delete: After {FREE_EXPIRY_DAYS} days</span>
-        <span>Max 500 MB / file</span>
+        <span>
+          {workspaceLimits.expiryDays === null
+            ? 'Files: Never expire'
+            : `Auto-delete: After ${workspaceLimits.expiryDays} days`}
+        </span>
+        <span>
+          Max {workspaceLimits.plan === 'pro' ? PLANS.pro.maxFileLabel : PLANS.free.maxFileLabel} / file
+        </span>
       </div>
     </div>
   );
@@ -1779,7 +2067,7 @@ export default function WorkspacePage() {
               {(
                 [
                   ['all', 'All', items.length],
-                  ['text', 'Notes', counts.text],
+                  ['text', 'Notes', counts.text + counts.code],
                   ['media', 'Media', counts.media],
                   ['link', 'Links', counts.link],
                   ['file', 'Files', counts.file],
@@ -1821,7 +2109,7 @@ export default function WorkspacePage() {
     </div>
         </header>
 
-        {(errorMsg || infoMsg) && (
+        {(errorMsg || infoMsg || undoDelete) && (
           <div className={styles.toastAnchor}>
             <div
               className={`${styles.floatingToast} ${
@@ -1843,7 +2131,18 @@ export default function WorkspacePage() {
                   aria-hidden="true"
                 />
               )}
-              <span>{errorMsg ?? infoMsg}</span>
+              <span>
+                {errorMsg ?? (undoDelete ? `Deleted "${undoDelete.label}"` : infoMsg)}
+              </span>
+              {!errorMsg && undoDelete && (
+                <button
+                  type="button"
+                  className={styles.toastUndoBtn}
+                  onClick={handleUndoDelete}
+                >
+                  Undo
+                </button>
+              )}
               <button
                 type="button"
                 className={styles.floatingToastClose}
@@ -1851,12 +2150,41 @@ export default function WorkspacePage() {
                 onClick={() => {
                   setErrorMsg(null);
                   setInfoMsg(null);
+                  setUndoDelete(null);
                 }}
               >
                 <X size={14} />
               </button>
             </div>
           </div>
+        )}
+
+        {missingKey && (
+          <form className={styles.recoveryBanner} onSubmit={(e) => void handleUnlockWithLink(e)}>
+            <div className={styles.recoveryBannerText}>
+              <Lock size={14} aria-hidden="true" />
+              <span>
+                This browser doesn&apos;t have your encryption key yet. Paste your backup recovery
+                link (or scan QR on a paired device) to unlock existing items.
+              </span>
+            </div>
+            <div className={styles.recoveryBannerRow}>
+              <input
+                type="password"
+                className={styles.recoveryInput}
+                placeholder="Paste backup recovery link (#wmk=...)"
+                value={recoveryDraft}
+                onChange={(e) => setRecoveryDraft(e.currentTarget.value)}
+              />
+              <button
+                type="submit"
+                className={styles.recoveryUnlockBtn}
+                disabled={unlockingKey || !recoveryDraft.trim()}
+              >
+                {unlockingKey ? 'Unlocking…' : 'Unlock'}
+              </button>
+            </div>
+          </form>
         )}
 
         <div
@@ -2589,7 +2917,10 @@ export default function WorkspacePage() {
                                     {fileName}
     </div>
                                   <div className={styles.attachmentSub}>
-                                    {formatBytes(item.raw.size_bytes)} · {FREE_EXPIRY_DAYS}d left
+                                    {formatBytes(item.raw.size_bytes)} ·{' '}
+                                    {item.raw.expires_at
+                                      ? `${workspaceLimits.expiryDays ?? 3}d left`
+                                      : 'Never expires'}
     </div>
     </div>
                                 <div className={styles.bubbleIconRow}>
@@ -2644,6 +2975,8 @@ export default function WorkspacePage() {
     </div>
 
         {(filter === 'all' ||
+          filter === 'text' ||
+          filter === 'link' ||
           filter === 'file' ||
           filter === 'media' ||
           uploadStatus !== null) && (
@@ -2657,9 +2990,24 @@ export default function WorkspacePage() {
                       {uploadStatus.fileName} ({formatBytes(uploadStatus.sizeBytes)})
                     </span>
                   </div>
-                  <span className={styles.uploadStatusMeta}>
-                    {uploadStatus.stage} · {uploadStatus.pct}%
-                  </span>
+                  <div className={styles.uploadStatusRight}>
+                    <span className={styles.uploadStatusMeta}>
+                      {uploadStatus.stage} · {uploadStatus.pct}%
+                    </span>
+                    {uploadStatus.stage === 'Uploading' && (
+                      <button
+                        type="button"
+                        className={styles.uploadCancelBtn}
+                        onClick={() => {
+                          uploadCancelledRef.current = true;
+                          uploadXhrRef.current?.abort();
+                          uploadAbortRef.current?.abort();
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
                 <div className={styles.uploadStatusTrack}>
                   <div

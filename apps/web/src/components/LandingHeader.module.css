@@ -57,6 +57,9 @@
 }
 
 .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
   padding: 6px 13px;
   border-radius: 9999px;
   font-size: 13.5px;
@@ -127,15 +130,30 @@
 
   .header {
     height: 52px;
-    padding: 0 8px 0 16px;
+    padding: 0 8px 0 14px;
+    gap: 8px;
   }
 
   .brand {
-    font-size: 18px;
-    gap: 7px;
+    min-height: 44px;
+    font-size: 17px;
+    gap: 6px;
   }
 
   .nav {
-    display: none;
+    display: flex;
+    gap: 2px;
+  }
+
+  .link {
+    min-height: 44px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  .ctaButton {
+    min-height: 44px;
+    padding: 6px 13px;
+    font-size: 13px;
   }
 }

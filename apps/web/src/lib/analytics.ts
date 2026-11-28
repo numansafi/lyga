@@ -5,7 +5,7 @@ type PostHogClient = typeof import('posthog-js').default;
 let posthogPromise: Promise<PostHogClient | null> | null = null;
 let initialized = false;
 
-export type WaitlistPlan = 'free' | 'pro_founder';
+export type PlanTier = 'free' | 'pro';
 
 async function loadPostHog(): Promise<PostHogClient | null> {
   if (typeof window === 'undefined') return null;
@@ -36,11 +36,7 @@ export function initAnalytics(): void {
 }
 
 export function trackEvent(
-  eventName:
-    | 'landing_viewed'
-    | 'cta_clicked'
-    | 'waitlist_submitted'
-    | 'device_combo_selected',
+  eventName: 'landing_viewed' | 'cta_clicked',
   properties?: Record<string, string>
 ): void {
   if (typeof window === 'undefined' || !process.env.NEXT_PUBLIC_POSTHOG_KEY) return;

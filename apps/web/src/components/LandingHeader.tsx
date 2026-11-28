@@ -5,10 +5,10 @@ import { Button } from '@mantine/core';
 import styles from './LandingHeader.module.css';
 
 interface LandingHeaderProps {
-  onOpenWaitlist: () => void;
+  onGetStarted: () => void;
 }
 
-export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
+export function LandingHeader({ onGetStarted }: LandingHeaderProps) {
   const [scrolled, setScrolled] = useState(false);
   const [activeSection, setActiveSection] = useState<'pricing' | 'faq' | null>(null);
 
@@ -22,8 +22,10 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
       const faqEl = document.getElementById('faq');
       const pricingEl = document.getElementById('pricing');
       const offset = 140;
+      const atBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 24;
 
-      if (faqEl && faqEl.getBoundingClientRect().top <= offset) {
+      if ((faqEl && faqEl.getBoundingClientRect().top <= offset) || atBottom) {
         setActiveSection('faq');
       } else if (pricingEl && pricingEl.getBoundingClientRect().top <= offset) {
         setActiveSection('pricing');
@@ -70,6 +72,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
           <a
             href="#pricing"
             className={`${styles.link} ${activeSection === 'pricing' ? styles.linkActive : ''}`}
+            aria-current={activeSection === 'pricing' ? 'location' : undefined}
             onClick={() => setActiveSection('pricing')}
           >
             Pricing
@@ -77,6 +80,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
           <a
             href="#faq"
             className={`${styles.link} ${activeSection === 'faq' ? styles.linkActive : ''}`}
+            aria-current={activeSection === 'faq' ? 'location' : undefined}
             onClick={() => setActiveSection('faq')}
           >
             FAQ
@@ -87,7 +91,7 @@ export function LandingHeader({ onOpenWaitlist }: LandingHeaderProps) {
             size="sm"
             radius="xl"
             className={styles.ctaButton}
-            onClick={onOpenWaitlist}
+            onClick={onGetStarted}
           >
             Log in
           </Button>

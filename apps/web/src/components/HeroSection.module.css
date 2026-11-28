@@ -55,27 +55,16 @@
 
 @keyframes dmPopIn {
   0% {
-    opacity: 0;
-    transform: translateY(14px) scale(0.86);
+    opacity: 1;
+    transform: translateY(8px) scale(0.96);
   }
   70% {
     opacity: 1;
-    transform: translateY(-2px) scale(1.015);
+    transform: translateY(-2px) scale(1.01);
   }
   100% {
     opacity: 1;
     transform: translateY(0) scale(1);
-  }
-}
-
-@keyframes receiptPop {
-  0% {
-    opacity: 0;
-    transform: scale(0.7);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1);
   }
 }
 
@@ -98,36 +87,38 @@
 
 .bubbleRight {
   align-self: center;
+  border-bottom-right-radius: 4px;
   transform-origin: calc(100% - 28px) 100%;
 }
 
 .step1 {
   align-self: center;
-  animation: dmPopIn 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.5s both;
+  animation: dmPopIn 0.45s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
 }
 
 .heroCta {
   appearance: none;
-  margin-top: 2px;
-  padding: 9px 18px;
-  border: 1px solid rgba(255, 255, 255, 0.38);
+  margin-top: 4px;
+  min-height: 44px;
+  padding: 11px 24px;
+  border: 0;
   border-radius: 999px;
-  background-color: rgba(255, 255, 255, 0.08);
-  color: #ffffff;
-  font-size: 13.5px;
-  font-weight: 600;
-  letter-spacing: 0.01em;
+  background-color: #5eead4;
+  color: #042220;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  backdrop-filter: blur(6px);
+  box-shadow: 0 10px 24px rgba(4, 34, 32, 0.28);
   transition:
     transform 120ms ease-out,
     background-color 150ms ease,
-    border-color 150ms ease;
+    box-shadow 150ms ease;
 }
 
 .heroCta:hover {
-  background-color: rgba(255, 255, 255, 0.16);
-  border-color: rgba(255, 255, 255, 0.65);
+  background-color: #7cf2df;
+  box-shadow: 0 12px 28px rgba(4, 34, 32, 0.34);
 }
 
 .heroCta:active {
@@ -140,20 +131,23 @@
 }
 
 .heroNote {
-  margin: -10px 0 0;
-  font-size: 12.5px;
+  margin: -6px 0 0;
+  font-size: 13px;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.94);
   letter-spacing: 0.01em;
+  text-wrap: pretty;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .bubble,
-  .receipt,
-  .orbitFile,
   .cornerPhone,
   .cornerPc {
     animation: none;
+  }
+
+  .orbitFile {
+    display: none;
   }
 }
 
@@ -302,42 +296,6 @@
   }
 }
 
-.receipt {
-  display: inline-block;
-  margin-left: 8px;
-  font-family: var(--font-mono), monospace;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.85);
-}
-
-.receipt1 {
-  animation: receiptPop 0.22s ease-out 0.9s both;
-}
-
-.bubbleRight::before {
-  content: '';
-  position: absolute;
-  right: 24px;
-  bottom: -16px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 16px 0 0 20px;
-  border-color: #ffffff transparent transparent transparent;
-}
-
-.bubbleRight::after {
-  content: '';
-  position: absolute;
-  right: 26px;
-  bottom: -12px;
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 14px 0 0 17.5px;
-  border-color: var(--accent-primary) transparent transparent transparent;
-}
-
 @media (max-width: 900px) {
   .section {
     min-height: 460px;
@@ -379,41 +337,45 @@
   }
 
   .bubble {
-    max-width: 285px;
+    max-width: 310px;
     margin-bottom: 10px;
-    padding: 8px 12px;
-    font-size: 11.5px;
-    line-height: 1.38;
+    padding: 10px 14px;
+    font-size: 13.5px;
+    line-height: 1.45;
     border-width: 1.5px;
     border-radius: 12px;
   }
 
   .receipt {
-    font-size: 10.5px;
+    font-size: 11px;
   }
 
   .heroCta {
-    padding: 8px 16px;
-    font-size: 13px;
+    padding: 10px 22px;
+    font-size: 14.5px;
   }
 
   .heroNote {
-    max-width: 260px;
-    font-size: 11.5px;
-    line-height: 1.4;
+    max-width: 300px;
+    font-size: 13px;
+    line-height: 1.42;
   }
 
   .cornerPhone {
     left: 14px;
     bottom: 14px;
-    transform: scale(0.82);
     opacity: 0.72;
   }
 
   .cornerPc {
     right: 14px;
     top: 74px;
-    transform: scale(0.82);
     opacity: 0.72;
+  }
+
+  .cornerPhone svg,
+  .cornerPc svg {
+    width: 26px;
+    height: 26px;
   }
 }

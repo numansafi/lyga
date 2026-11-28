@@ -11,16 +11,10 @@ export function HighlightsSection() {
         <div className={styles.cards}>
           <div className={`${styles.card} ${styles.cardPrimary}`}>
             <span className={styles.cardText}>From phone to PC in milliseconds</span>
-            <span className={styles.tick} aria-hidden="true">
-              ✓✓
-            </span>
           </div>
 
           <div className={`${styles.card} ${styles.cardNeutral}`}>
             <span className={styles.cardText}>Feels like texting yourself</span>
-            <span className={styles.tick} aria-hidden="true">
-              ✓✓
-            </span>
           </div>
 
           <div className={`${styles.card} ${styles.cardSolid}`}>

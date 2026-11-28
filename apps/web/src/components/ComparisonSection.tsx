@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { PLANS } from '@/lib/pricingplan';
 import styles from './ComparisonSection.module.css';
 
 interface ComparisonCell {
@@ -22,7 +23,7 @@ const ROWS: ComparisonRow[] = [
     whatsapp: { text: 'Tiny — 16 MB', pct: 4 },
     emailFwd: { text: '25 MB', pct: 6 },
     localSend: { text: '2 GB (free tier)', pct: 40 },
-    lyga: { text: '500 MB free, 5 GB Pro', pct: 100 },
+    lyga: { text: `${PLANS.free.maxFileLabel} free, ${PLANS.pro.maxFileLabel} ${PLANS.pro.shortName}`, pct: 100 },
   },
   {
     feature: 'Does it ruin quality?',
