@@ -89,7 +89,7 @@ export default function LoginPage() {
       setRequestedPlan(plan);
     }
     if (params.get('disconnected') === '1') {
-      setErrorMsg('This device was disconnected from the workspace.');
+      setInfoMsg('This device was disconnected from the workspace.');
     }
 
     const mediaQuery = window.matchMedia('(min-width: 761px)');
