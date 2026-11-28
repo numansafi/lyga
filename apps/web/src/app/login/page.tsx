@@ -20,7 +20,6 @@ import {
   AuthSubmitButton,
   EncryptedBadge,
   QrUnlockPanel,
-  TroubleSigningInHelp,
   formatAuthError,
 } from './LoginFields';
 import styles from './Login.module.css';
@@ -84,9 +83,13 @@ export default function LoginPage() {
   const confirmPasswordRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const plan = new URLSearchParams(window.location.search).get('plan');
+    const params = new URLSearchParams(window.location.search);
+    const plan = params.get('plan');
     if (plan === 'pro' || plan === 'free') {
       setRequestedPlan(plan);
+    }
+    if (params.get('disconnected') === '1') {
+      setErrorMsg('This device was disconnected from the workspace.');
     }
 
     const mediaQuery = window.matchMedia('(min-width: 761px)');
@@ -697,7 +700,6 @@ export default function LoginPage() {
           </form>
         )}
 
-          <TroubleSigningInHelp />
         </div>
 
         <QrUnlockPanel
