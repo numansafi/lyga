@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { after, NextResponse } from 'next/server';
 import { setSessionCookie, withWorkspaceSession } from '@/lib/mvp/api-context';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from '@/lib/mvp/auth';
+import { detectDeviceNameFromUserAgent } from '@/lib/mvp/device-label';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
 import {
@@ -27,7 +28,7 @@ function sanitizeWorkspace(workspace: Awaited<ReturnType<typeof getOrCreateUserW
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const cookieStore = await cookies();
     const auth = decodeAuthToken(cookieStore.get(AUTH_COOKIE_NAME)?.value);
@@ -56,9 +57,10 @@ export async function GET() {
           deviceId: session.deviceId,
         });
       }
-      if (!auth) {
+      if (!state || !auth) {
         const res = NextResponse.json({ error: 'Device disconnected.' }, { status: 401 });
         res.cookies.delete(SESSION_COOKIE_NAME);
+        res.cookies.delete(AUTH_COOKIE_NAME);
         return res;
       }
     }
@@ -70,7 +72,8 @@ export async function GET() {
       );
     }
 
-    const result = await getOrCreateUserWorkspace(auth.userId, 'Desktop Browser');
+    const deviceLabel = detectDeviceNameFromUserAgent(req.headers.get('user-agent') ?? '');
+    const result = await getOrCreateUserWorkspace(auth.userId, deviceLabel);
     const res = NextResponse.json({
       workspace: sanitizeWorkspace(result.workspace),
       devices: result.devices,

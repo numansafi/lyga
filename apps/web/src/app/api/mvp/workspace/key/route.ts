@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import { NextResponse } from 'next/server';
 import { setSessionCookie } from '@/lib/mvp/api-context';
 import { AUTH_COOKIE_NAME, decodeAuthToken } from '@/lib/mvp/auth';
+import { detectDeviceNameFromUserAgent } from '@/lib/mvp/device-label';
 import { decodeSessionToken, SESSION_COOKIE_NAME } from '@/lib/mvp/session';
 import {
   getOrCreateUserWorkspace,
@@ -10,7 +11,7 @@ import {
   saveWorkspaceWrappedKey,
 } from '@/lib/mvp/workspace-store';
 
-async function resolveWorkspaceContext(): Promise<
+async function resolveWorkspaceContext(req: Request): Promise<
   | { workspaceId: string; newDeviceId?: string }
   | null
 > {
@@ -27,16 +28,17 @@ async function resolveWorkspaceContext(): Promise<
 
   if (!auth) return null;
 
-  const created = await getOrCreateUserWorkspace(auth.userId, 'Desktop Browser');
+  const deviceLabel = detectDeviceNameFromUserAgent(req.headers.get('user-agent') ?? '');
+  const created = await getOrCreateUserWorkspace(auth.userId, deviceLabel);
   return {
     workspaceId: created.workspace.id,
     newDeviceId: created.deviceId,
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const ctx = await resolveWorkspaceContext();
+    const ctx = await resolveWorkspaceContext(req);
     if (!ctx) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
@@ -58,7 +60,7 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const ctx = await resolveWorkspaceContext();
+    const ctx = await resolveWorkspaceContext(req);
     if (!ctx) {
       return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
     }
