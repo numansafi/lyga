@@ -527,7 +527,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
             </div>
             <div className={styles.pricingMsgHeader}>
               <h2 className={styles.compareMsgTitle} style={{ margin: 0 }}>
-                Start free today. Pro ({isYearly ? `${PLANS.pro.yearlyMonthlyLabel}/mo` : `${PLANS.pro.priceLabel}/mo`}) is coming soon.
+                Start free. Or go Pro ({isYearly ? `${PLANS.pro.yearlyMonthlyLabel}/mo` : `${PLANS.pro.priceLabel}/mo`}) anytime.
               </h2>
               <div className={styles.billingToggle} role="group" aria-label="Billing interval">
                 <button
@@ -594,6 +594,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                   </ul>
                 </div>
                 <Button
+                  variant="default"
                   size="md"
                   fullWidth
                   className={styles.pressBtn}
@@ -607,7 +608,7 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 <div>
                   <div className={styles.planHeader}>
                     <h3 className={styles.planName}>Pro</h3>
-                    <span className={styles.earlyBadge}>Coming soon · Founder Rate</span>
+                    <span className={styles.earlyBadge}>Founder Rate</span>
                   </div>
                   <div className={styles.priceRow}>
                     <span className={styles.price}>
@@ -658,15 +659,14 @@ export function DmFeedSection({ onSelectPlan }: DmFeedSectionProps) {
                 </div>
                 <div>
                   <Button
-                    variant="default"
                     size="md"
                     fullWidth
                     className={styles.pressBtn}
                     onClick={() => onSelectPlan('pro')}
                   >
-                    Start free · Pro coming soon →
+                    Get Pro →
                   </Button>
-                  <p className={styles.ctaNote}>Free plan works right now. No card needed.</p>
+                  <p className={styles.ctaNote}>Cancel anytime. Secure checkout via Stripe.</p>
                 </div>
               </div>
             </div>

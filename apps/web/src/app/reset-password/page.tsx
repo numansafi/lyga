@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@mantine/core';
 import { Check, Eye, EyeOff, Lock, X } from 'lucide-react';
+import { wrapWorkspaceKey } from '@/lib/mvp/crypto';
+import { getWorkspaceKey } from '@/lib/mvp/key-store';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
 import loginStyles from '../login/Login.module.css';
 import callbackStyles from '../auth/callback/Callback.module.css';
@@ -17,6 +19,7 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [reWrapNote, setReWrapNote] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ password?: string; confirm?: string }>({});
   const passwordRef = useRef<HTMLInputElement>(null);
@@ -48,8 +51,36 @@ export default function ResetPasswordPage() {
         setErrorMsg(error.message);
         return;
       }
+      try {
+        const keyRes = await fetch('/api/mvp/workspace/key', { cache: 'no-store' });
+        if (keyRes.ok) {
+          const data = (await keyRes.json()) as { workspaceId?: string };
+          if (data.workspaceId) {
+            const localWmk = await getWorkspaceKey(data.workspaceId);
+            if (localWmk) {
+              const wrapped = await wrapWorkspaceKey(
+                localWmk,
+                password,
+                data.workspaceId,
+                'password'
+              );
+              await fetch('/api/mvp/workspace/key', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(wrapped),
+              });
+            } else {
+              setReWrapNote(
+                'Your encrypted key is still protected by your previous password or a paired device.'
+              );
+            }
+          }
+        }
+      } catch {
+        // Non-fatal: /app handles unlock fallback.
+      }
       setDone(true);
-      window.setTimeout(() => router.replace('/app'), 1200);
+      window.setTimeout(() => router.replace('/app'), 1400);
     } catch {
       setErrorMsg('Unable to update password. Please request a new reset link.');
     } finally {
@@ -86,6 +117,11 @@ export default function ResetPasswordPage() {
             </div>
             <h1 className={loginStyles.title}>Password updated</h1>
             <p className={callbackStyles.subtitle}>Opening your Lyga workspace…</p>
+            {reWrapNote ? (
+              <p className={callbackStyles.subtitle} style={{ marginTop: 8 }}>
+                {reWrapNote}
+              </p>
+            ) : null}
           </div>
         ) : (
           <>

@@ -271,3 +271,265 @@ export function classifyFileKind(mimeType: string, fileName: string): 'media' | 
   }
   return 'file';
 }
+
+const WEAK_SIX_DIGIT_PINS = new Set([
+  '000000',
+  '111111',
+  '222222',
+  '333333',
+  '444444',
+  '555555',
+  '666666',
+  '777777',
+  '888888',
+  '999999',
+  '123456',
+  '654321',
+  '012345',
+  '543210',
+  '112233',
+  '121212',
+]);
+
+/** Validates a 6-digit Sync PIN, returning an error message or null if valid. */
+export function validateSyncPin(pin: string): string | null {
+  if (!/^\d{6}$/.test(pin)) {
+    return 'Sync PIN must be exactly 6 digits.';
+  }
+  if (WEAK_SIX_DIGIT_PINS.has(pin)) {
+    return 'Choose a less predictable 6-digit PIN (avoid repeated or sequential digits).';
+  }
+  return null;
+}
+
+/** Hashes a 6-digit PIN locally so raw digits are never sent to the pepper endpoint. */
+export async function derivePinHash(pin: string, workspaceId: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    toArrayBuffer(new TextEncoder().encode(`lyga-pin-hash-v1:${workspaceId}:${pin}`))
+  );
+  return toBase64Url(new Uint8Array(digest));
+}
+
+/** Combines the local 6-digit PIN with the rate-limited server pepper for PBKDF2 wrapping. */
+export function combinePinWithPepper(pin: string, pepper: string): string {
+  return `${pin}:${pepper}`;
+}
+
+export type WrappedKeyKind = 'password' | 'passphrase';
+
+export const WMK_PBKDF2_ITERATIONS = 600_000;
+
+export interface WrappedWorkspaceKey {
+  wrappedWmk: string;
+  salt: string;
+  iv: string;
+  iterations: number;
+  kind: WrappedKeyKind;
+  fingerprint: string;
+}
+
+/** One-way SHA-256 fingerprint proving possession of `wmk` without revealing it. */
+export async function computeWmkFingerprint(wmkBase64Url: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    toArrayBuffer(new TextEncoder().encode(`lyga-wmk-fp:${wmkBase64Url}`))
+  );
+  return toBase64Url(new Uint8Array(digest));
+}
+
+async function deriveWrappingKey(
+  secret: string,
+  salt: Uint8Array,
+  iterations: number
+): Promise<CryptoKey> {
+  const baseKey = await crypto.subtle.importKey(
+    'raw',
+    toArrayBuffer(new TextEncoder().encode(secret)),
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  return crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: toArrayBuffer(salt),
+      iterations,
+      hash: 'SHA-256',
+    },
+    baseKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+function buildWrapAad(workspaceId: string): ArrayBuffer {
+  return toArrayBuffer(new TextEncoder().encode(`lyga-wmk-v1:${workspaceId}`));
+}
+
+/** Encrypts `wmk` in the browser with a PBKDF2-derived key bound to `workspaceId`. */
+export async function wrapWorkspaceKey(
+  wmkBase64Url: string,
+  secret: string,
+  workspaceId: string,
+  kind: WrappedKeyKind,
+  iterations = WMK_PBKDF2_ITERATIONS
+): Promise<WrappedWorkspaceKey> {
+  if (!secret || secret.length < 6) {
+    throw new Error('Secret must be at least 6 characters.');
+  }
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const wrappingKey = await deriveWrappingKey(secret, salt, iterations);
+  const cipherBuf = await crypto.subtle.encrypt(
+    {
+      name: 'AES-GCM',
+      iv: toArrayBuffer(iv),
+      additionalData: buildWrapAad(workspaceId),
+    },
+    wrappingKey,
+    toArrayBuffer(new TextEncoder().encode(wmkBase64Url))
+  );
+  const fingerprint = await computeWmkFingerprint(wmkBase64Url);
+  return {
+    wrappedWmk: toBase64Url(new Uint8Array(cipherBuf)),
+    salt: toBase64Url(salt),
+    iv: toBase64Url(iv),
+    iterations,
+    kind,
+    fingerprint,
+  };
+}
+
+/** Decrypts a wrapped workspace key in the browser and verifies its fingerprint. */
+export async function unwrapWorkspaceKey(
+  wrapped: Omit<WrappedWorkspaceKey, 'kind'> & { kind?: WrappedKeyKind },
+  secret: string,
+  workspaceId: string
+): Promise<string> {
+  const salt = fromBase64Url(wrapped.salt);
+  const iv = fromBase64Url(wrapped.iv);
+  const cipher = fromBase64Url(wrapped.wrappedWmk);
+  const wrappingKey = await deriveWrappingKey(secret, salt, wrapped.iterations);
+  const plainBuf = await crypto.subtle.decrypt(
+    {
+      name: 'AES-GCM',
+      iv: toArrayBuffer(iv),
+      additionalData: buildWrapAad(workspaceId),
+    },
+    wrappingKey,
+    toArrayBuffer(cipher)
+  );
+  const wmk = new TextDecoder().decode(plainBuf);
+  if (wrapped.fingerprint) {
+    const actualFp = await computeWmkFingerprint(wmk);
+    if (actualFp !== wrapped.fingerprint) {
+      throw new Error('Workspace key fingerprint mismatch.');
+    }
+  }
+  return wmk;
+}
+
+/** Ephemeral ECDH P-256 keypair for camera-free 1-Tap Device Approval. */
+export async function generateApprovalKeyPair(): Promise<{
+  publicKeyB64: string;
+  privateKey: CryptoKey;
+}> {
+  const pair = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveKey']
+  );
+  const spki = await crypto.subtle.exportKey('spki', pair.publicKey);
+  return {
+    publicKeyB64: toBase64Url(new Uint8Array(spki)),
+    privateKey: pair.privateKey,
+  };
+}
+
+/** Deterministic 4-digit match code derived from approval ID and public key. */
+export async function deriveShortVerificationCode(
+  publicKeyB64: string,
+  approvalId: string
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    toArrayBuffer(new TextEncoder().encode(`${approvalId}:${publicKeyB64}`))
+  );
+  const view = new DataView(digest);
+  const code = view.getUint32(0, false) % 10_000;
+  return String(code).padStart(4, '0');
+}
+
+export async function encryptWmkForPublicKey(
+  wmkBase64Url: string,
+  recipientPublicKeyB64: string,
+  approvalId: string
+): Promise<string> {
+  const recipientPub = await crypto.subtle.importKey(
+    'spki',
+    toArrayBuffer(fromBase64Url(recipientPublicKeyB64)),
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    []
+  );
+  const ephemeral = await crypto.subtle.generateKey(
+    { name: 'ECDH', namedCurve: 'P-256' },
+    true,
+    ['deriveKey']
+  );
+  const sharedAes = await crypto.subtle.deriveKey(
+    { name: 'ECDH', public: recipientPub },
+    ephemeral.privateKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt']
+  );
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const aad = toArrayBuffer(new TextEncoder().encode(`lyga-approve-v1:${approvalId}`));
+  const cipherBuf = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv: toArrayBuffer(iv), additionalData: aad },
+    sharedAes,
+    toArrayBuffer(new TextEncoder().encode(wmkBase64Url))
+  );
+  const ephemSpki = await crypto.subtle.exportKey('spki', ephemeral.publicKey);
+  return JSON.stringify({
+    v: 1,
+    epk: toBase64Url(new Uint8Array(ephemSpki)),
+    iv: toBase64Url(iv),
+    c: toBase64Url(new Uint8Array(cipherBuf)),
+  });
+}
+
+export async function decryptWmkFromApproval(
+  payload: string,
+  recipientPrivateKey: CryptoKey,
+  approvalId: string
+): Promise<string> {
+  const parsed = JSON.parse(payload) as { v?: number; epk?: string; iv?: string; c?: string };
+  if (parsed.v !== 1 || !parsed.epk || !parsed.iv || !parsed.c) {
+    throw new Error('Invalid approval payload.');
+  }
+  const senderPub = await crypto.subtle.importKey(
+    'spki',
+    toArrayBuffer(fromBase64Url(parsed.epk)),
+    { name: 'ECDH', namedCurve: 'P-256' },
+    false,
+    []
+  );
+  const sharedAes = await crypto.subtle.deriveKey(
+    { name: 'ECDH', public: senderPub },
+    recipientPrivateKey,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['decrypt']
+  );
+  const aad = toArrayBuffer(new TextEncoder().encode(`lyga-approve-v1:${approvalId}`));
+  const plainBuf = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: toArrayBuffer(fromBase64Url(parsed.iv)), additionalData: aad },
+    sharedAes,
+    toArrayBuffer(fromBase64Url(parsed.c))
+  );
+  return new TextDecoder().decode(plainBuf);
+}

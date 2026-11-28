@@ -265,4 +265,51 @@ describe('mvp session & workspace-store', () => {
       { ok: false, reason: 'storage_full' }
     );
   });
+
+  it('stores wrapped workspace key and blocks overwriting with a mismatched fingerprint', async () => {
+    const {
+      createWorkspaceWithDevice,
+      getWorkspaceWrappedKey,
+      saveWorkspaceWrappedKey,
+    } = await import('./workspace-store.ts');
+
+    const { workspace } = await createWorkspaceWithDevice('Primary Laptop');
+    assert.equal(await getWorkspaceWrappedKey(workspace.id), null);
+
+    const first = await saveWorkspaceWrappedKey(workspace.id, {
+      wrappedWmk: 'cipher-1',
+      salt: 'salt-1',
+      iv: 'iv-1',
+      iterations: 600_000,
+      kind: 'password',
+      fingerprint: 'fp-abc',
+    });
+    assert.deepEqual(first, { ok: true });
+
+    const loaded = await getWorkspaceWrappedKey(workspace.id);
+    assert.equal(loaded?.wrappedWmk, 'cipher-1');
+    assert.equal(loaded?.kind, 'password');
+
+    // Rotation with matching fingerprint succeeds
+    const rotated = await saveWorkspaceWrappedKey(workspace.id, {
+      wrappedWmk: 'cipher-2',
+      salt: 'salt-2',
+      iv: 'iv-2',
+      iterations: 600_000,
+      kind: 'passphrase',
+      fingerprint: 'fp-abc',
+    });
+    assert.deepEqual(rotated, { ok: true });
+
+    // Overwrite with a different fingerprint is rejected
+    const clobber = await saveWorkspaceWrappedKey(workspace.id, {
+      wrappedWmk: 'evil-cipher',
+      salt: 'salt-3',
+      iv: 'iv-3',
+      iterations: 600_000,
+      kind: 'password',
+      fingerprint: 'fp-different',
+    });
+    assert.deepEqual(clobber, { ok: false, reason: 'fingerprint_mismatch' });
+  });
 });

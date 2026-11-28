@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { NextConfig } from 'next';
+import { withSentryConfig } from '@sentry/nextjs/config';
 
 const SECURITY_HEADERS = [
   { key: 'X-Content-Type-Options', value: 'nosniff' },
@@ -15,7 +16,7 @@ const SECURITY_HEADERS = [
       "font-src 'self' data: https://fonts.gstatic.com",
       "img-src 'self' data: blob: https://i.ytimg.com https://www.google.com https://*.gstatic.com",
       "media-src 'self' blob:",
-      "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com https://eu.i.posthog.com https://eu-assets.i.posthog.com",
+      "connect-src 'self' https://*.supabase.co https://*.r2.cloudflarestorage.com https://eu.i.posthog.com https://eu-assets.i.posthog.com https://*.ingest.de.sentry.io https://*.ingest.sentry.io",
       "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
       "frame-ancestors 'none'",
       "base-uri 'self'",
@@ -39,4 +40,9 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withSentryConfig(nextConfig, {
+  org: 'lyga',
+  project: 'lyga-web',
+  sentryUrl: 'https://de.sentry.io/',
+  silent: !process.env.CI,
+});

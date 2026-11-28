@@ -24,6 +24,14 @@ export interface WorkspaceRecord {
   stripe_subscription_id?: string | null;
   subscription_status?: string | null;
   current_period_end?: string | null;
+  wrapped_wmk?: string | null;
+  wmk_salt?: string | null;
+  wmk_iv?: string | null;
+  wmk_kdf_iterations?: number | null;
+  wmk_wrap_kind?: 'password' | 'passphrase' | null;
+  wmk_fingerprint?: string | null;
+  hasWrappedKey?: boolean;
+  wmkWrapKind?: 'password' | 'passphrase' | null;
   created_at: string;
 }
 

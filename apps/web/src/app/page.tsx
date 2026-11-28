@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { DmFeedSection } from '@/components/DmFeedSection';
 import feedStyles from '@/components/DmFeedSection.module.css';
@@ -30,7 +31,14 @@ export default function HomePage() {
       </main>
       <footer className={feedStyles.siteFooter}>
         <strong className={feedStyles.siteFooterBrand}>LYGA</strong> · Built for phone and
-        computer · Encrypted in your browser
+        computer · Encrypted in your browser ·{' '}
+        <Link href="/privacy" className={feedStyles.siteFooterLink}>
+          Privacy
+        </Link>{' '}
+        ·{' '}
+        <Link href="/terms" className={feedStyles.siteFooterLink}>
+          Terms
+        </Link>
       </footer>
     </>
   );

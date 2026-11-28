@@ -1,27 +1,43 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Button, Loader } from '@mantine/core';
-import { Eye, EyeOff, Lock, Mail, RefreshCw, X } from 'lucide-react';
+import { Loader } from '@mantine/core';
+import { Eye, EyeOff, Mail } from 'lucide-react';
 import { validateAuthEmail } from '@/lib/email-validation';
+import {
+  generateWorkspaceKey,
+  unwrapWorkspaceKey,
+  wrapWorkspaceKey,
+  type WrappedWorkspaceKey,
+} from '@/lib/mvp/crypto';
+import { getWorkspaceKey, saveWorkspaceKey } from '@/lib/mvp/key-store';
 import { useQrLoginSession } from '@/lib/mvp/use-qr-login';
 import { getSupabaseBrowser } from '@/lib/supabase-browser';
+import {
+  AuthEmailField,
+  AuthErrorBanner,
+  AuthSubmitButton,
+  EncryptedBadge,
+  QrUnlockPanel,
+  TroubleSigningInHelp,
+  formatAuthError,
+} from './LoginFields';
+import {
+  OTP_COOLDOWN_SECONDS,
+  clearOtpState,
+  loadOtpState,
+  remainingCooldown,
+  saveOtpState,
+} from './login-otp-storage';
 import styles from './Login.module.css';
-
-const LygaQrCode = dynamic(
-  () => import('@/components/LygaQrCode').then((m) => m.LygaQrCode),
-  { ssr: false }
-);
 
 type AuthMode = 'otp' | 'password';
 
 export default function LoginPage() {
   const router = useRouter();
   const supabase = getSupabaseBrowser();
-  const [checking, setChecking] = useState(true);
   const [mode, setMode] = useState<AuthMode>('otp');
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -31,11 +47,23 @@ export default function LoginPage() {
   const [otpCode, setOtpCode] = useState('');
   const [otpCooldown, setOtpCooldown] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [secondaryLoading, setSecondaryLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
+  const [isDesktopQr, setIsDesktopQr] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [googleError, setGoogleError] = useState<string | null>(null);
+  const [qrError, setQrError] = useState<string | null>(null);
+  const [qrPaired, setQrPaired] = useState(false);
+  const redirectTimerRef = useRef<number | null>(null);
   const { qrUrl, qrExpired, startQrSession } = useQrLoginSession({
-    enabled: !checking,
-    onApproved: () => router.replace('/app'),
-    onError: (msg) => setErrorMsg(msg),
+    enabled: isDesktopQr,
+    onApproved: () => {
+      setQrPaired(true);
+      redirectTimerRef.current = window.setTimeout(() => router.replace('/app'), 320);
+    },
+    onError: (msg) => {
+      setQrError(msg);
+    },
   });
   const [fieldErrors, setFieldErrors] = useState<{
     email?: string;
@@ -43,30 +71,108 @@ export default function LoginPage() {
     otp?: string;
   }>({});
   const [infoMsg, setInfoMsg] = useState<string | null>(null);
+  const [requestedPlan, setRequestedPlan] = useState<'free' | 'pro' | null>(null);
   const emailInputRef = useRef<HTMLInputElement>(null);
   const passwordInputRef = useRef<HTMLInputElement>(null);
   const otpInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    const plan = new URLSearchParams(window.location.search).get('plan');
+    if (plan === 'pro' || plan === 'free') {
+      setRequestedPlan(plan);
+    }
+
+    const mediaQuery = window.matchMedia('(min-width: 761px)');
+    setIsDesktopQr(mediaQuery.matches);
+    const onMediaChange = (e: MediaQueryListEvent) => setIsDesktopQr(e.matches);
+    mediaQuery.addEventListener('change', onMediaChange);
+
+    const stored = loadOtpState();
+    if (stored) {
+      setEmail(stored.email);
+      setOtpSent(true);
+      setInfoMsg(`Enter the 6-digit code we sent to ${stored.email}.`);
+      const remaining = remainingCooldown(stored.sentAt);
+      if (remaining > 0) setOtpCooldown(remaining);
+    }
+
+    return () => mediaQuery.removeEventListener('change', onMediaChange);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (redirectTimerRef.current !== null) window.clearTimeout(redirectTimerRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
     let active = true;
-    fetch('/api/auth/session', { cache: 'no-store' })
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 8000);
+    fetch('/api/auth/session', { cache: 'no-store', signal: controller.signal })
       .then((res) => {
         if (!active) return;
         if (res.ok) {
           router.replace('/app');
-        } else {
-          setChecking(false);
         }
       })
       .catch(() => {
-        if (active) setChecking(false);
+        // Stay on /login when session check fails or times out
+      })
+      .finally(() => {
+        window.clearTimeout(timeoutId);
       });
     return () => {
       active = false;
+      window.clearTimeout(timeoutId);
+      controller.abort();
     };
   }, [router]);
 
-  const exchangeSession = async (accessToken: string) => {
+  const syncWrappedKeyForPasswordAuth = async (passwordForWrap: string) => {
+    try {
+      const keyRes = await fetch('/api/mvp/workspace/key', { cache: 'no-store' });
+      if (!keyRes.ok) return;
+      const data = (await keyRes.json()) as {
+        workspaceId?: string;
+        hasWrappedKey?: boolean;
+        wrappedKey?: WrappedWorkspaceKey | null;
+      };
+      if (!data.workspaceId) return;
+
+      const localWmk = await getWorkspaceKey(data.workspaceId);
+      if (data.hasWrappedKey && data.wrappedKey) {
+        if (!localWmk && data.wrappedKey.kind === 'password') {
+          try {
+            const wmk = await unwrapWorkspaceKey(
+              data.wrappedKey,
+              passwordForWrap,
+              data.workspaceId
+            );
+            await saveWorkspaceKey(data.workspaceId, wmk);
+          } catch {
+            // Password may have been reset without re-wrapping; /app unlock banner handles fallback.
+          }
+        }
+        return;
+      }
+
+      const wmk = localWmk || (await generateWorkspaceKey());
+      if (!localWmk) {
+        await saveWorkspaceKey(data.workspaceId, wmk);
+      }
+      const wrapped = await wrapWorkspaceKey(wmk, passwordForWrap, data.workspaceId, 'password');
+      await fetch('/api/mvp/workspace/key', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(wrapped),
+      });
+    } catch {
+      // Non-fatal: /app unlock flow handles recovery if key sync fails.
+    }
+  };
+
+  const exchangeSession = async (accessToken: string, passwordForWrap?: string) => {
     const res = await fetch('/api/auth/session', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,22 +182,38 @@ export default function LoginPage() {
       const err = (await res.json().catch(() => null)) as { error?: string } | null;
       throw new Error(err?.error ?? 'Unable to complete sign-in.');
     }
+    if (passwordForWrap) {
+      await syncWrappedKeyForPasswordAuth(passwordForWrap);
+    }
+    clearOtpState();
     router.replace('/app');
   };
 
   const handleGoogleLogin = async () => {
     if (!supabase) return;
     setErrorMsg(null);
+    setGoogleError(null);
     setLoading(true);
+    setGoogleLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/auth/callback` },
       });
-      if (error) setErrorMsg(error.message);
+      if (error) {
+        setGoogleError(formatAuthError(error.message, 'Unable to start Google sign-in.'));
+        setGoogleLoading(false);
+        setLoading(false);
+      }
+      // On success the browser navigates to Google; keep the button busy until it does.
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Unable to start Google sign-in.');
-    } finally {
+      setGoogleError(
+        formatAuthError(
+          err instanceof Error ? err.message : null,
+          'Unable to start Google sign-in.'
+        )
+      );
+      setGoogleLoading(false);
       setLoading(false);
     }
   };
@@ -138,12 +260,13 @@ export default function LoginPage() {
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(formatAuthError(error.message, 'Unable to send sign-in email.'));
         return;
       }
       setOtpSent(true);
-      setOtpCooldown(30);
-      setInfoMsg('Check your email for a 6-digit code or sign-in link.');
+      setOtpCooldown(OTP_COOLDOWN_SECONDS);
+      setInfoMsg(`Enter the 6-digit code we sent to ${cleanEmail}.`);
+      saveOtpState(cleanEmail);
     } catch {
       setErrorMsg('Unable to send sign-in email.');
     } finally {
@@ -157,27 +280,39 @@ export default function LoginPage() {
     return () => window.clearTimeout(timer);
   }, [otpCooldown]);
 
+  useEffect(() => {
+    if (!otpSent) return;
+    const timer = window.setTimeout(() => otpInputRef.current?.focus(), 120);
+    return () => window.clearTimeout(timer);
+  }, [otpSent]);
+
   const handleResendOtp = async () => {
-    if (!supabase || otpCooldown > 0) return;
+    if (!supabase || otpCooldown > 0 || loading || secondaryLoading) return;
     const check = validateAuthEmail(email);
-    if (!check.valid) return;
+    if (!check.valid) {
+      setFieldErrors({ email: check.error ?? 'Please enter a valid email address.' });
+      setOtpSent(false);
+      window.requestAnimationFrame(() => emailInputRef.current?.focus());
+      return;
+    }
     setErrorMsg(null);
-    setLoading(true);
+    setSecondaryLoading(true);
     try {
       const { error } = await supabase.auth.signInWithOtp({
         email: check.normalized,
         options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
       });
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(formatAuthError(error.message, 'Unable to resend sign-in email.'));
         return;
       }
-      setOtpCooldown(30);
-      setInfoMsg('Sent a fresh 6-digit code to your email.');
+      setOtpCooldown(OTP_COOLDOWN_SECONDS);
+      setInfoMsg(`Sent a fresh 6-digit code to ${check.normalized}.`);
+      saveOtpState(check.normalized);
     } catch {
       setErrorMsg('Unable to resend sign-in email.');
     } finally {
-      setLoading(false);
+      setSecondaryLoading(false);
     }
   };
 
@@ -186,26 +321,30 @@ export default function LoginPage() {
     if (!supabase) return;
     setErrorMsg(null);
     const cleanCode = otpCode.trim();
-    if (!cleanCode) {
+    if (cleanCode.length !== 6) {
       setFieldErrors({ otp: 'Enter the 6-digit code from your email.' });
       otpInputRef.current?.focus();
       return;
     }
     setFieldErrors({});
     setLoading(true);
+    const emailCheck = validateAuthEmail(email);
+    const normalizedEmail = emailCheck.valid ? emailCheck.normalized : email.trim().toLowerCase();
     try {
       const { data, error } = await supabase.auth.verifyOtp({
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         token: cleanCode,
         type: 'email',
       });
       if (error || !data.session?.access_token) {
-        setErrorMsg(error?.message ?? 'Invalid or expired code.');
+        setErrorMsg(formatAuthError(error?.message, 'Invalid or expired code.'));
         return;
       }
       await exchangeSession(data.session.access_token);
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Unable to verify code.');
+      setErrorMsg(
+        formatAuthError(err instanceof Error ? err.message : null, 'Unable to verify code.')
+      );
     } finally {
       setLoading(false);
     }
@@ -244,20 +383,20 @@ export default function LoginPage() {
       return;
     }
     setFieldErrors({});
-    setLoading(true);
+    setSecondaryLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(check.normalized, {
         redirectTo: `${window.location.origin}/auth/callback?next=/reset-password`,
       });
       if (error) {
-        setErrorMsg(error.message);
+        setErrorMsg(formatAuthError(error.message, 'Unable to send password reset email.'));
         return;
       }
       setInfoMsg('If an account exists for that email, we sent a password reset link.');
     } catch {
       setErrorMsg('Unable to send password reset email.');
     } finally {
-      setLoading(false);
+      setSecondaryLoading(false);
     }
   };
 
@@ -293,19 +432,19 @@ export default function LoginPage() {
           options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
         });
         if (error) {
-          setErrorMsg(error.message);
+          setErrorMsg(formatAuthError(error.message, 'Unable to create account.'));
           return;
         }
         if (data.session?.access_token) {
-          await exchangeSession(data.session.access_token);
+          await exchangeSession(data.session.access_token, password);
         } else if (data.user?.identities && data.user.identities.length === 0) {
           setIsSignUp(false);
           setPassword('');
-          setErrorMsg('An account with this email already exists. Log in or use Email code.');
+          setErrorMsg('An account with this email already exists. Sign in or use Email code.');
         } else {
           setIsSignUp(false);
           setPassword('');
-          setInfoMsg('Account created! Check your email to confirm, then log in.');
+          setInfoMsg('Account created! Check your email to confirm, then sign in.');
         }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -313,32 +452,26 @@ export default function LoginPage() {
           password,
         });
         if (error || !data.session?.access_token) {
-          setErrorMsg(error?.message ?? 'Invalid email or password.');
+          setErrorMsg(formatAuthError(error?.message, 'Incorrect email or password.'));
           return;
         }
-        await exchangeSession(data.session.access_token);
+        await exchangeSession(data.session.access_token, password);
       }
     } catch (err) {
-      setErrorMsg(err instanceof Error ? err.message : 'Authentication failed.');
+      setErrorMsg(
+        formatAuthError(err instanceof Error ? err.message : null, 'Authentication failed.')
+      );
     } finally {
       setLoading(false);
     }
   };
-
-  if (checking) {
-    return (
-      <main className={styles.page}>
-        <Loader color="spruce" size="md" />
-      </main>
-    );
-  }
 
   return (
     <main className={styles.page}>
       <div className={styles.shell}>
         <div className={styles.card}>
           <div className={styles.topRow}>
-            <Link href="/" className={styles.brand}>
+            <Link href="/" className={styles.brand} aria-label="LYGA — Back to home">
               <svg width="24" height="24" viewBox="48 48 160 178" fill="none" aria-hidden="true">
                 <path
                   stroke="#5EEAD4"
@@ -350,19 +483,21 @@ export default function LoginPage() {
               </svg>
               <span>LYGA</span>
             </Link>
-            <span className={styles.e2eeBadge}>
-              <Lock size={11} aria-hidden="true" />
-              Encrypted
-            </span>
+            <EncryptedBadge />
           </div>
 
           <h1 className={styles.title}>
             {supabase && mode === 'password'
               ? isSignUp
                 ? 'Create a new account'
-                : 'Log in to Lyga'
+                : 'Sign in to Lyga'
               : 'Sign in or sign up'}
           </h1>
+          {requestedPlan === 'pro' && (
+            <p className={styles.planNotice}>
+              Sign in to continue with Lyga Pro (Founder Rate).
+            </p>
+          )}
 
         {supabase ? (
           <>
@@ -370,44 +505,119 @@ export default function LoginPage() {
               type="button"
               className={styles.googleBtn}
               disabled={loading}
+              aria-busy={googleLoading}
               onClick={() => void handleGoogleLogin()}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  fill="#EA4335"
-                  d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.1.8 3.8 1.5l2.6-2.5C16.8 3.5 14.6 2.5 12 2.5 6.8 2.5 2.5 6.8 2.5 12s4.3 9.5 9.5 9.5c5.5 0 9.1-3.8 9.1-9.2 0-.6-.1-1.1-.2-1.6H12z"
-                />
-              </svg>
-              <span>Continue with Google</span>
+              {googleLoading ? (
+                <Loader size={16} color="white" aria-hidden="true" />
+              ) : (
+                <svg width="17" height="17" viewBox="0 0 24 24" aria-hidden="true">
+                  <path
+                    fill="#4285F4"
+                    d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5c-.3 1.5-1.1 2.8-2.4 3.6v3h3.9c2.3-2.1 3.5-5.2 3.5-8.8z"
+                  />
+                  <path
+                    fill="#34A853"
+                    d="M12 24c3.2 0 6-1.1 8-3l-3.9-3c-1.1.7-2.5 1.2-4.1 1.2-3.2 0-5.9-2.1-6.8-5H1.2v3.1C3.2 21.3 7.3 24 12 24z"
+                  />
+                  <path
+                    fill="#FBBC05"
+                    d="M5.2 14.2c-.2-.7-.4-1.4-.4-2.2s.1-1.5.4-2.2V6.7H1.2C.4 8.3 0 10.1 0 12s.4 3.7 1.2 5.3l4-3.1z"
+                  />
+                  <path
+                    fill="#EA4335"
+                    d="M12 4.8c1.8 0 3.4.6 4.6 1.8l3.5-3.5C18 1.1 15.2 0 12 0 7.3 0 3.2 2.7 1.2 6.7l4 3.1c.9-2.9 3.6-5 6.8-5z"
+                  />
+                </svg>
+              )}
+              <span>{googleLoading ? 'Connecting to Google…' : 'Continue with Google'}</span>
             </button>
+
+            {googleError && (
+              <AuthErrorBanner message={googleError} onDismiss={() => setGoogleError(null)} />
+            )}
 
             <div className={styles.divider}>
               <span>or</span>
             </div>
 
-            <div className={styles.modeTabs} role="tablist">
+            <div
+              className={styles.modeTabs}
+              data-mode={mode}
+              role="tablist"
+              aria-label="Sign-in method"
+              onKeyDown={(e) => {
+                if (loading) return;
+                if (
+                  e.key !== 'ArrowLeft' &&
+                  e.key !== 'ArrowRight' &&
+                  e.key !== 'Home' &&
+                  e.key !== 'End'
+                ) {
+                  return;
+                }
+                e.preventDefault();
+                const nextMode: AuthMode =
+                  e.key === 'Home'
+                    ? 'otp'
+                    : e.key === 'End'
+                      ? 'password'
+                      : mode === 'otp'
+                        ? 'password'
+                        : 'otp';
+                setMode(nextMode);
+                setErrorMsg(null);
+                setGoogleError(null);
+                if (nextMode === 'otp' && otpSent) {
+                  const check = validateAuthEmail(email);
+                  const target = check.valid ? check.normalized : email.trim().toLowerCase();
+                  setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
+                } else {
+                  setInfoMsg(null);
+                }
+                setFieldErrors({});
+                document.getElementById(`tab-${nextMode}`)?.focus();
+              }}
+            >
+              <div className={styles.tabSlider} aria-hidden="true" />
               <button
+                id="tab-otp"
                 type="button"
                 role="tab"
+                disabled={loading}
                 aria-selected={mode === 'otp'}
+                aria-controls="login-auth-panel"
+                tabIndex={mode === 'otp' ? 0 : -1}
                 className={`${styles.modeTab} ${mode === 'otp' ? styles.modeTabActive : ''}`}
                 onClick={() => {
                   setMode('otp');
                   setErrorMsg(null);
-                  setInfoMsg(null);
+                  setGoogleError(null);
+                  if (otpSent) {
+                    const check = validateAuthEmail(email);
+                    const target = check.valid ? check.normalized : email.trim().toLowerCase();
+                    setInfoMsg(`Enter the 6-digit code we sent to ${target}.`);
+                  } else {
+                    setInfoMsg(null);
+                  }
                   setFieldErrors({});
                 }}
               >
                 Email code
               </button>
               <button
+                id="tab-password"
                 type="button"
                 role="tab"
+                disabled={loading}
                 aria-selected={mode === 'password'}
+                aria-controls="login-auth-panel"
+                tabIndex={mode === 'password' ? 0 : -1}
                 className={`${styles.modeTab} ${mode === 'password' ? styles.modeTabActive : ''}`}
                 onClick={() => {
                   setMode('password');
                   setErrorMsg(null);
+                  setGoogleError(null);
                   setInfoMsg(null);
                   setFieldErrors({});
                 }}
@@ -415,6 +625,12 @@ export default function LoginPage() {
                 Password
               </button>
             </div>
+
+            <div
+              id="login-auth-panel"
+              role="tabpanel"
+              aria-labelledby={mode === 'otp' ? 'tab-otp' : 'tab-password'}
+            >
 
             {mode === 'otp' ? (
               otpSent ? (
@@ -424,20 +640,24 @@ export default function LoginPage() {
                       <span>{infoMsg}</span>
                     </div>
                   )}
-                  <label className={styles.label}>
-                    6-digit code from email
+                  <div className={styles.fieldGroup}>
+                    <label htmlFor="login-otp-code" className={styles.label}>
+                      6-digit code from email
+                    </label>
                     <input
+                      id="login-otp-code"
                       ref={otpInputRef}
                       type="text"
                       inputMode="numeric"
                       autoComplete="one-time-code"
+                      maxLength={6}
                       aria-invalid={Boolean(fieldErrors.otp)}
                       aria-describedby={fieldErrors.otp ? 'login-otp-error' : undefined}
-                      className={`${styles.input} ${fieldErrors.otp ? styles.inputError : ''}`}
+                      className={`${styles.input} ${styles.otpInput} ${fieldErrors.otp ? styles.inputError : ''}`}
                       placeholder="123456"
                       value={otpCode}
                       onChange={(e) => {
-                        setOtpCode(e.currentTarget.value);
+                        setOtpCode(e.currentTarget.value.replace(/\D/g, '').slice(0, 6));
                         if (fieldErrors.otp) setFieldErrors((prev) => ({ ...prev, otp: undefined }));
                         if (errorMsg) setErrorMsg(null);
                       }}
@@ -448,40 +668,28 @@ export default function LoginPage() {
                         {fieldErrors.otp}
                       </p>
                     )}
-                  </label>
-                  {errorMsg && (
-                    <div className={styles.errorBanner} role="alert">
-                      <span>{errorMsg}</span>
-                      <button
-                        type="button"
-                        className={styles.bannerClose}
-                        aria-label="Dismiss error"
-                        onClick={() => setErrorMsg(null)}
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                  )}
-                  <Button
-                    type="submit"
-                    fullWidth
-                    loading={loading}
-                    className={styles.primaryBtn}
-                  >
-                    Verify &amp; continue →
-                  </Button>
+                  </div>
+                  {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
+                  <AuthSubmitButton loading={loading} disabled={loading || secondaryLoading}>
+                    Verify &amp; continue
+                  </AuthSubmitButton>
                   <div className={styles.otpActionsRow}>
                     <button
                       type="button"
                       className={styles.linkBtn}
-                      disabled={loading || otpCooldown > 0}
+                      disabled={loading || secondaryLoading || otpCooldown > 0}
                       onClick={() => void handleResendOtp()}
                     >
-                      {otpCooldown > 0 ? `Resend code (${otpCooldown}s)` : 'Resend code'}
+                      {secondaryLoading
+                        ? 'Resending…'
+                        : otpCooldown > 0
+                          ? `Resend code (${otpCooldown}s)`
+                          : 'Resend code'}
                     </button>
                     <button
                       type="button"
                       className={styles.linkBtn}
+                      disabled={loading}
                       onClick={() => {
                         setOtpSent(false);
                         setOtpCode('');
@@ -489,6 +697,8 @@ export default function LoginPage() {
                         setInfoMsg(null);
                         setErrorMsg(null);
                         setFieldErrors({});
+                        clearOtpState();
+                        window.requestAnimationFrame(() => emailInputRef.current?.focus());
                       }}
                     >
                       Use a different email
@@ -497,103 +707,72 @@ export default function LoginPage() {
                 </form>
               ) : (
                 <form className={styles.form} noValidate onSubmit={(e) => void handleSendOtp(e)}>
-                  <label className={styles.label}>
-                    Email address
-                    <input
-                      ref={emailInputRef}
-                      type="email"
-                      autoComplete="email"
-                      aria-invalid={Boolean(fieldErrors.email)}
-                      aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
-                      className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => {
-                        setEmail(e.currentTarget.value);
-                        if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                        if (errorMsg) setErrorMsg(null);
-                      }}
-                      onBlur={handleEmailBlur}
-                      required
-                    />
-                    {fieldErrors.email && (
-                      <p id="login-email-error" className={styles.fieldError} role="alert">
-                        {fieldErrors.email}
-                      </p>
-                    )}
-                  </label>
-                  {errorMsg && (
-                    <div className={styles.errorBanner} role="alert">
-                      <span>{errorMsg}</span>
-                      <button
-                        type="button"
-                        className={styles.bannerClose}
-                        aria-label="Dismiss error"
-                        onClick={() => setErrorMsg(null)}
-                      >
-                        <X size={15} />
-                      </button>
-                    </div>
-                  )}
-                  <Button
-                    type="submit"
-                    fullWidth
-                    loading={loading}
-                    className={styles.primaryBtn}
-                    leftSection={<Mail size={15} />}
-                  >
-                    Send sign-in code →
-                  </Button>
-                </form>
-              )
-            ) : (
-              <form className={styles.form} noValidate onSubmit={(e) => void handlePasswordAuth(e)}>
-                <label className={styles.label}>
-                  Email address
-                  <input
-                    ref={emailInputRef}
-                    type="email"
-                    autoComplete="email"
-                    aria-invalid={Boolean(fieldErrors.email)}
-                    aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
-                    className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
-                    placeholder="you@example.com"
+                  <AuthEmailField
+                    id="login-otp-email"
+                    inputRef={emailInputRef}
                     value={email}
-                    onChange={(e) => {
-                      setEmail(e.currentTarget.value);
+                    error={fieldErrors.email}
+                    onChangeValue={(value) => {
+                      setEmail(value);
                       if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
                       if (errorMsg) setErrorMsg(null);
                     }}
                     onBlur={handleEmailBlur}
-                    required
                   />
-                  {fieldErrors.email && (
-                    <p id="login-email-error" className={styles.fieldError} role="alert">
-                      {fieldErrors.email}
-                    </p>
-                  )}
-                </label>
-                <label className={styles.label}>
-                  <span className={styles.labelRow}>
-                    <span>Password</span>
+                  {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
+                  <AuthSubmitButton
+                    loading={loading}
+                    disabled={loading || secondaryLoading}
+                    icon={<Mail size={15} aria-hidden="true" />}
+                  >
+                    Send sign-in code
+                  </AuthSubmitButton>
+                </form>
+              )
+            ) : (
+              <form className={styles.form} noValidate onSubmit={(e) => void handlePasswordAuth(e)}>
+                <AuthEmailField
+                  id="login-password-email"
+                  inputRef={emailInputRef}
+                  value={email}
+                  error={fieldErrors.email}
+                  onChangeValue={(value) => {
+                    setEmail(value);
+                    if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    if (errorMsg) setErrorMsg(null);
+                  }}
+                  onBlur={handleEmailBlur}
+                />
+                <div className={styles.fieldGroup}>
+                  <div className={styles.labelRow}>
+                    <label htmlFor="login-password" className={styles.label}>
+                      Password
+                    </label>
                     {!isSignUp && (
                       <button
                         type="button"
                         className={styles.inlineLinkBtn}
-                        disabled={loading}
+                        disabled={loading || secondaryLoading}
                         onClick={() => void handleForgotPassword()}
                       >
-                        Forgot password?
+                        {secondaryLoading ? 'Sending reset link…' : 'Forgot password?'}
                       </button>
                     )}
-                  </span>
+                  </div>
                   <div className={styles.passwordWrap}>
                     <input
+                      id="login-password"
                       ref={passwordInputRef}
                       type={showPassword ? 'text' : 'password'}
                       autoComplete={isSignUp ? 'new-password' : 'current-password'}
                       aria-invalid={Boolean(fieldErrors.password)}
-                      aria-describedby={fieldErrors.password ? 'login-password-error' : undefined}
+                      aria-describedby={
+                        fieldErrors.password
+                          ? 'login-password-error'
+                          : isSignUp
+                            ? 'login-password-hint'
+                            : undefined
+                      }
                       className={`${styles.input} ${styles.passwordInput} ${fieldErrors.password ? styles.inputError : ''}`}
                       placeholder="••••••••"
                       minLength={6}
@@ -610,43 +789,31 @@ export default function LoginPage() {
                       type="button"
                       className={styles.eyeBtn}
                       aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      aria-pressed={showPassword}
                       onClick={() => setShowPassword((v) => !v)}
                     >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      {showPassword ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
                     </button>
                   </div>
-                  {fieldErrors.password && (
+                  {fieldErrors.password ? (
                     <p id="login-password-error" className={styles.fieldError} role="alert">
                       {fieldErrors.password}
                     </p>
-                  )}
-                </label>
+                  ) : isSignUp ? (
+                    <p id="login-password-hint" className={styles.fieldHint}>
+                      At least 6 characters
+                    </p>
+                  ) : null}
+                </div>
                 {infoMsg && (
                   <div className={styles.infoBanner} role="status">
                     <span>{infoMsg}</span>
                   </div>
                 )}
-                {errorMsg && (
-                  <div className={styles.errorBanner} role="alert">
-                    <span>{errorMsg}</span>
-                    <button
-                      type="button"
-                      className={styles.bannerClose}
-                      aria-label="Dismiss error"
-                      onClick={() => setErrorMsg(null)}
-                    >
-                      <X size={15} />
-                    </button>
-                  </div>
-                )}
-                <Button
-                  type="submit"
-                  fullWidth
-                  loading={loading}
-                  className={styles.primaryBtn}
-                >
-                  {isSignUp ? 'Create account →' : 'Log in →'}
-                </Button>
+                {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
+                <AuthSubmitButton loading={loading} disabled={loading || secondaryLoading}>
+                  {isSignUp ? 'Create account' : 'Sign in'}
+                </AuthSubmitButton>
                 <div className={styles.authSwitchRow}>
                   <span className={styles.authSwitchHint}>
                     {isSignUp ? 'Already have an account?' : 'New to Lyga?'}
@@ -654,6 +821,7 @@ export default function LoginPage() {
                   <button
                     type="button"
                     className={styles.linkBtn}
+                    disabled={loading}
                     onClick={() => {
                       setIsSignUp((v) => !v);
                       setPassword('');
@@ -663,97 +831,48 @@ export default function LoginPage() {
                       setFieldErrors({});
                     }}
                   >
-                    {isSignUp ? 'Log in' : 'Create new account'}
+                    {isSignUp ? 'Sign in' : 'Create new account'}
                   </button>
                 </div>
               </form>
             )}
+            </div>
           </>
         ) : (
           <form className={styles.form} noValidate onSubmit={(e) => void handleSendOtp(e)}>
-            <label className={styles.label}>
-              Local dev email
-              <input
-                ref={emailInputRef}
-                type="email"
-                aria-invalid={Boolean(fieldErrors.email)}
-                aria-describedby={fieldErrors.email ? 'login-email-error' : undefined}
-                className={`${styles.input} ${fieldErrors.email ? styles.inputError : ''}`}
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.currentTarget.value);
-                  if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
-                  if (errorMsg) setErrorMsg(null);
-                }}
-                onBlur={handleEmailBlur}
-                required
-              />
-              {fieldErrors.email && (
-                <p id="login-email-error" className={styles.fieldError} role="alert">
-                  {fieldErrors.email}
-                </p>
-              )}
-            </label>
-            {errorMsg && (
-              <div className={styles.errorBanner} role="alert">
-                <span>{errorMsg}</span>
-                <button
-                  type="button"
-                  className={styles.bannerClose}
-                  aria-label="Dismiss error"
-                  onClick={() => setErrorMsg(null)}
-                >
-                  <X size={15} />
-                </button>
-              </div>
-            )}
-            <Button
-              type="submit"
-              fullWidth
-              loading={loading}
-              className={styles.primaryBtn}
-            >
-              Continue in local dev →
-            </Button>
+            <AuthEmailField
+              id="login-dev-email"
+              label="Local dev email"
+              inputRef={emailInputRef}
+              value={email}
+              error={fieldErrors.email}
+              onChangeValue={(value) => {
+                setEmail(value);
+                if (fieldErrors.email) setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                if (errorMsg) setErrorMsg(null);
+              }}
+              onBlur={handleEmailBlur}
+            />
+            {errorMsg && <AuthErrorBanner message={errorMsg} onDismiss={() => setErrorMsg(null)} />}
+            <AuthSubmitButton loading={loading} disabled={loading || secondaryLoading}>
+              Continue in local dev
+            </AuthSubmitButton>
           </form>
         )}
+
+          <TroubleSigningInHelp />
         </div>
 
-        <aside className={styles.qrPanel} aria-label="Unlock with your phone">
-          <div className={styles.qrStage}>
-            <span className={`${styles.cornerBracket} ${styles.cornerTL}`} aria-hidden="true" />
-            <span className={`${styles.cornerBracket} ${styles.cornerTR}`} aria-hidden="true" />
-            <span className={`${styles.cornerBracket} ${styles.cornerBL}`} aria-hidden="true" />
-            <span className={`${styles.cornerBracket} ${styles.cornerBR}`} aria-hidden="true" />
-
-            <div className={styles.qrFrame}>
-              {qrUrl && !qrExpired ? (
-                <LygaQrCode value={qrUrl} size={184} />
-              ) : (
-                <div className={styles.qrPlaceholder}>
-                  {qrExpired ? (
-                    <button
-                      type="button"
-                      className={styles.qrRefreshBtn}
-                      onClick={() => void startQrSession()}
-                    >
-                      <RefreshCw size={16} />
-                      <span>Refresh QR</span>
-                    </button>
-                  ) : (
-                    <Loader color="spruce" size="sm" />
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
-          <h2 className={styles.qrTitle}>Scan with your phone</h2>
-          <p className={styles.qrCopy}>
-            Signed in on your phone? Scan to unlock this browser.
-          </p>
-        </aside>
+        <QrUnlockPanel
+          qrUrl={qrUrl}
+          qrExpired={qrExpired}
+          qrError={qrError}
+          qrPaired={qrPaired}
+          onRetry={() => {
+            setQrError(null);
+            void startQrSession();
+          }}
+        />
       </div>
     </main>
   );
