@@ -58,7 +58,8 @@ export function useWorkspaceSync({
   setErrorMsg,
   decryptedCacheRef,
 }: UseWorkspaceSyncArgs) {
-  const loadSeqRef = useRef(0);
+  const inFlightLoadRef = useRef<Promise<void> | null>(null);
+  const queuedLoadRef = useRef<Promise<void> | null>(null);
 
   const decryptItems = useCallback(
     async (rawItems: FeedItemRecord[], key: CryptoKey): Promise<DecryptedFeedItem[]> => {
@@ -96,10 +97,10 @@ export function useWorkspaceSync({
   );
 
   const loadWorkspace = useCallback(async () => {
-    const seq = ++loadSeqRef.current;
-    try {
-      const res = await fetch('/api/mvp/workspace', { cache: 'no-store' });
-      if (seq !== loadSeqRef.current) return;
+    const runSingleLoad = () => {
+      const task = (async () => {
+        try {
+          const res = await fetch('/api/mvp/workspace', { cache: 'no-store' });
 
       if (!res.ok) {
         if (res.status === 401) {
@@ -123,7 +124,6 @@ export function useWorkspaceSync({
         userEmail?: string;
         deviceId: string;
       };
-      if (seq !== loadSeqRef.current) return;
 
       setWorkspace(data.workspace);
       setUserEmail(data.userEmail ?? null);
@@ -158,7 +158,6 @@ export function useWorkspaceSync({
         importWorkspaceKey(wmk),
         importWorkspaceHkdfKey(wmk),
       ]);
-      if (seq !== loadSeqRef.current) return;
       setCryptoKey(imported);
       setHkdfKey(importedHkdf);
 
@@ -166,12 +165,30 @@ export function useWorkspaceSync({
       setPairUrl(url);
 
       const decrypted = await decryptItems(data.items, imported);
-      if (seq !== loadSeqRef.current) return;
       setItems(decrypted);
-    } catch {
-      if (seq !== loadSeqRef.current) return;
-      setErrorMsg('Unable to load workspace. Refresh to try again.');
+        } catch {
+          setErrorMsg('Unable to load workspace. Refresh to try again.');
+        } finally {
+          inFlightLoadRef.current = null;
+        }
+      })();
+      inFlightLoadRef.current = task;
+      return task;
+    };
+
+    if (inFlightLoadRef.current) {
+      if (!queuedLoadRef.current) {
+        queuedLoadRef.current = inFlightLoadRef.current
+          .catch(() => undefined)
+          .then(() => {
+            queuedLoadRef.current = null;
+            return runSingleLoad();
+          });
+      }
+      return queuedLoadRef.current;
     }
+
+    return runSingleLoad();
   }, [
     decryptItems,
     router,

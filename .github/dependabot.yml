@@ -6,16 +6,9 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 10
     groups:
-      minor-and-patch:
-        update-types:
-          - "minor"
-          - "patch"
-  - package-ecosystem: "npm"
-    directory: "/apps/web"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
+      mantine:
+        patterns:
+          - "@mantine/*"
       minor-and-patch:
         update-types:
           - "minor"
